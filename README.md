@@ -231,3 +231,39 @@ El script se puede configurar modificando el diccionario `CONFIG` al inicio del 
 1. Ejecuta `python3 generador.py`.
 2. Si una plantilla no se procesa, revisa `parsing_errors.log`. El error te indicará qué parte del formato de la plantilla está mal.
 3. Si una plantilla se procesa pero no genera preguntas, revisa `compile_errors.log`. El error de GCC te indicará qué está mal en el código C de la plantilla.
+
+## 7. Previsualización del Cuestionario: `preview.html`
+
+El archivo `preview.html` es una herramienta de visualización que permite previsualizar el cuestionario XML generado antes de importarlo en Moodle. Esta herramienta es especialmente útil para revisar el formato, el contenido de las preguntas y verificar que todo se ve correctamente.
+
+### 7.1. Características
+
+- **Visualización local**: No requiere servidor web ni Moodle, se ejecuta completamente en el navegador.
+- **Renderizado de Markdown**: Procesa formato Markdown en las preguntas y respuestas, incluyendo bloques de código.
+- **Resaltado de sintaxis**: Utiliza highlight.js para aplicar colores a los bloques de código C.
+- **Organización por categorías**: Muestra la categoría de cada pregunta tal como aparecerá en Moodle.
+- **Modo mezclar**: Parámetro URL `?mix=true` para mostrar las preguntas en orden aleatorio.
+- **Modo respuestas**: Parámetro URL `?answers=true` para resaltar visualmente las respuestas correctas.
+
+### 7.2. Uso
+
+1. Abre el archivo `preview.html` en tu navegador web.
+2. Haz clic en "Seleccionar archivo XML" y elige el archivo XML generado por `generador.py` (por defecto `cuestionario_moodle.xml`).
+3. El cuestionario se mostrará automáticamente con formato legible.
+
+### 7.3. Parámetros URL
+
+Puedes usar parámetros en la URL para modificar la visualización:
+
+```
+preview.html?mix=true          # Mezcla el orden de las preguntas
+preview.html?answers=true      # Resalta las respuestas correctas
+preview.html?mix=true&answers=true  # Ambas opciones combinadas
+```
+
+### 7.4. Casos de Uso
+
+- **Revisión de contenido**: Verificar que los enunciados, el código y las respuestas se ven correctamente.
+- **Control de calidad**: Detectar errores tipográficos o problemas de formato antes de importar a Moodle.
+- **Validación de distractores**: Con `?answers=true`, verificar que las respuestas incorrectas son plausibles y que la correcta es única.
+- **Prueba de variantes**: Revisar rápidamente múltiples variantes de las preguntas generadas.
