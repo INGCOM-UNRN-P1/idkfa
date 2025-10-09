@@ -1,4 +1,4 @@
-# Manual de Usuario: Generador de Cuestionarios Moodle (`generador.py`)
+# `IDKFA`: Generador de Cuestionarios Moodle
 
 ## 1. Introducción
 
