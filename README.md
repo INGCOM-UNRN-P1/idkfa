@@ -4,38 +4,64 @@
 
 ### 1.1. Descripción del Proyecto
 
-Este proyecto proporciona un sistema automatizado para generar cuestionarios de programación en C destinados a Moodle. El generador permite crear preguntas de opción múltiple con variantes aleatorias a partir de plantillas de código C, facilitando la evaluación de estudiantes con preguntas únicas que evitan el plagio y la memorización.
+Este proyecto proporciona un sistema automatizado para generar cuestionarios de
+programación en C destinados a Moodle. El generador permite crear preguntas de
+opción múltiple con variantes aleatorias a partir de plantillas de código C,
+facilitando la evaluación de estudiantes con preguntas únicas que evitan el
+plagio y la memorización.
 
-`generador.py` es el script principal que procesa plantillas de código C (`.c`) ubicadas en el directorio `templates/`, genera múltiples variantes de cada pregunta con valores aleatorios, compila y ejecuta el código para obtener las respuestas correctas automáticamente, genera distractores inteligentes, y finalmente produce un archivo XML compatible con Moodle listo para importar.
+`generador.py` es el script principal que procesa plantillas de código C (`.c`)
+ubicadas en el directorio `templates/`, genera múltiples variantes de cada
+pregunta con valores aleatorios, compila y ejecuta el código para obtener las
+respuestas correctas automáticamente, genera distractores inteligentes, y
+finalmente produce un archivo XML compatible con Moodle listo para importar.
 
 ### 1.2. Características Principales
 
-- **Generación automática de variantes**: Crea múltiples versiones de cada pregunta con valores aleatorios.
-- **Ejecución automática**: Compila y ejecuta el código C para determinar la respuesta correcta.
-- **Distractores inteligentes**: Genera respuestas incorrectas plausibles basadas en errores comunes.
-- **Organización por categorías**: Utiliza la estructura de directorios para categorizar preguntas en Moodle.
-- **Modo de verificación**: Permite generar solo el código C para revisión y depuración antes de crear el XML.
-- **Formato legible**: Sustituye operadores de C por símbolos Unicode para mejor visualización y hacerlos _resistentes_ a copypasteo.
+- **Generación automática de variantes**: Crea múltiples versiones de cada
+  pregunta con valores aleatorios.
+- **Ejecución automática**: Compila y ejecuta el código C para determinar la
+  respuesta correcta.
+- **Distractores inteligentes**: Genera respuestas incorrectas plausibles
+  basadas en errores comunes.
+- **Organización por categorías**: Utiliza la estructura de directorios para
+  categorizar preguntas en Moodle.
+- **Modo de verificación**: Permite generar solo el código C para revisión y
+  depuración antes de crear el XML.
+- **Intencionalmente ilegible por el compilador**: Se sustituyen diversos
+  caracteres como operadores y símbolos equivalentes _visualmente_ de Unicode
+  para hacerlos _resistentes_ a copypasteo, pero también para sumar legibilidad
+  a caracteres invisibles.
+
+![caracter impostor](impostor.jpg)
 
 ## 2. Uso Básico
 
 El script se ejecuta desde la línea de comandos:
 
 ```bash
-python3 generador.py [opciones]
+./generador.py [opciones]
 ```
 
 ### Argumentos de Línea de Comandos
 
-- **`-s` o `--source`**: Especifica el directorio donde se encuentran las plantillas (`.c`). Por defecto es `templates`.
-- **`-o` o `--output`**: Especifica el nombre del archivo XML de salida. Por defecto es `cuestionario_moodle.xml`.
-- **`-n` o `--num`**: El número de preguntas (variantes) a generar por cada plantilla. Por defecto es `5`.
-- **`-c` o `--category`**: El nombre de la categoría raíz bajo la cual se organizarán las preguntas en Moodle. Por defecto es `programacion1_gen_codigo`.
-- **`-g` o `--generate-only`**: Solo genera código C en el directorio `generated` sin crear el XML de Moodle. Útil para verificar el funcionamiento de las plantillas.
+- **`-s` o `--source`**: Especifica el directorio donde se encuentran las
+  plantillas (`.c`). Por defecto es `templates`.
+- **`-o` o `--output`**: Especifica el nombre del archivo XML de salida. Por
+  defecto es `cuestionario_moodle.xml`.
+- **`-n` o `--num`**: El número de preguntas (variantes) a generar por cada
+  plantilla. Por defecto es `5`.
+- **`-c` o `--category`**: El nombre de la categoría raíz bajo la cual se
+  organizarán las preguntas en Moodle. Por defecto es
+  `programacion1_gen_codigo`.
+- **`-g` o `--generate-only`**: Solo genera código C en el directorio
+  `generated` sin crear el XML de Moodle. Útil para verificar el funcionamiento
+  de las plantillas.
 
 ### Modo de Verificación: Generación de Código C
 
-El argumento `-g` o `--generate-only` permite generar solo el código C de las plantillas sin crear el archivo XML de Moodle. Este modo es útil para:
+El argumento `-g` o `--generate-only` permite generar solo el código C de las
+plantillas sin crear el archivo XML de Moodle. Este modo es útil para:
 
 - Verificar que las plantillas se procesan correctamente
 - Compilar y probar manualmente las variantes generadas
@@ -44,17 +70,22 @@ El argumento `-g` o `--generate-only` permite generar solo el código C de las p
 **Ejemplo de uso:**
 
 ```bash
-python3 generador.py -g -n 3
+./generador.py -g -n 3
 ```
 
-Este comando generará 3 variantes de cada plantilla en el directorio `generated/`. La estructura de directorios interna será la misma que en `templates/`, pero cada archivo `.c` generará un subdirectorio con sus variantes.
+Este comando generará 3 variantes de cada plantilla en el directorio
+`generated/`. La estructura de directorios interna será la misma que en
+`templates/`, pero cada archivo `.c` generará un subdirectorio con sus
+variantes.
 
 Por ejemplo, si existe `templates/punteros/basico.c`, se generarán:
+
 - `generated/punteros/basico/basico_v1.c`
 - `generated/punteros/basico/basico_v2.c`
 - `generated/punteros/basico/basico_v3.c`
 
-El script también creará un `Makefile` en el directorio `generated/` para facilitar la compilación:
+El script también creará un `Makefile` en el directorio `generated/` para
+facilitar la compilación:
 
 ```bash
 cd generated
@@ -64,24 +95,33 @@ make clean        # Elimina los ejecutables
 
 ## 3. Estructura de Directorios y Categorías
 
-El script utiliza la estructura de directorios dentro de la carpeta `source` para crear una jerarquía de categorías en Moodle. 
+El script utiliza la estructura de directorios dentro de la carpeta `source`
+para crear una jerarquía de categorías en Moodle.
 
-Por ejemplo, una plantilla ubicada en `templates/punteros/avanzado/mi_plantilla.c` se añadirá a la siguiente categoría en Moodle:
+Por ejemplo, una plantilla ubicada en
+`templates/punteros/avanzado/mi_plantilla.c` se añadirá a la siguiente categoría
+en Moodle:
 
 `$course$/top/programacion1_gen_codigo/punteros/avanzado`
 
-Esto permite organizar las preguntas de forma lógica y coherente con el temario del curso.
+Esto permite organizar las preguntas de forma lógica y coherente con el temario
+del curso.
 
 ## 4. Anatomía de una Plantilla `.c`
 
-Cada archivo `.c` es una plantilla que combina código C válido con bloques de metadatos especiales. Debe ser compilable y ejecutable por sí mismo para facilitar las pruebas.
+Cada archivo `.c` es una plantilla que combina código C válido con bloques de
+metadatos especiales. Debe ser compilable y ejecutable por sí mismo para
+facilitar las pruebas.
 
 ### 4.1. Enunciado de la Pregunta (Comentarios `//`)
 
-El enunciado de la pregunta se define mediante dos comentarios de una sola línea (`//`).
+El enunciado de la pregunta se define mediante dos comentarios de una sola línea
+(`//`).
 
-- **Comentario de Introducción**: La primera línea de comentario `//` que encuentra el script se usa como el texto que precede al bloque de código.
-- **Comentario de Cierre**: La última línea de comentario `//` que encuentra se usa como el texto que va después del bloque de código.
+- **Comentario de Introducción**: La primera línea de comentario `//` que
+  encuentra el script se usa como el texto que precede al bloque de código.
+- **Comentario de Cierre**: La última línea de comentario `//` que encuentra se
+  usa como el texto que va después del bloque de código.
 
 ```c
 // Analiza el siguiente código. ¿Cuál es el valor final de 'x'?
@@ -97,10 +137,14 @@ int main() {
 
 ### 4.2. Código C y Macros de Prueba
 
-El cuerpo del archivo debe ser un programa en C válido. Para permitir que las variables sean dinámicas, se utiliza un sistema de macros que el script reemplaza.
+El cuerpo del archivo debe ser un programa en C válido. Para permitir que las
+variables sean dinámicas, se utiliza un sistema de macros que el script
+reemplaza.
 
 - **Variables Dinámicas**: Se definen como `__nombre_variable__`.
-- **Macros de Prueba**: Para que el archivo `.c` se pueda compilar de forma independiente para pruebas, puedes definir macros con los mismos nombres. El script las eliminará automáticamente antes de procesar la plantilla.
+- **Macros de Prueba**: Para que el archivo `.c` se pueda compilar de forma
+  independiente para pruebas, puedes definir macros con los mismos nombres. El
+  script las eliminará automáticamente antes de procesar la plantilla.
 
 ```c
 //# --- Macros para desarrollo y prueba ---
@@ -117,6 +161,7 @@ int b = __val_b__;
 Los metadatos se definen en bloques de comentarios `/* seccion ... */`.
 
 #### `/*name*/` (Obligatorio)
+
 Define el nombre base de la pregunta en el banco de Moodle.
 
 ```c
@@ -126,10 +171,14 @@ Operaciones Aritméticas Básicas
 ```
 
 #### `/*var*/` (Opcional)
-Define las variables dinámicas. Cada línea es una variable con la sintaxis `nombre: expresion_python`.
+
+Define las variables dinámicas. Cada línea es una variable con la sintaxis
+`nombre: expresion_python`.
 
 - `nombre`: El nombre de la variable (sin los `__`).
-- `expresion_python`: Cualquier expresión de Python válida que devuelva un iterable (como una lista o un `range`). El script elegirá un valor al azar de este iterable.
+- `expresion_python`: Cualquier expresión de Python válida que devuelva un
+  iterable (como una lista o un `range`). El script elegirá un valor al azar de
+  este iterable.
 
 ```c
 /*var
@@ -140,7 +189,9 @@ operador: ["+", "-", "*"]
 ```
 
 #### `/*opciones*/` (Opcional)
-Define una lista de respuestas incorrectas **fijas** que siempre estarán disponibles.
+
+Define una lista de respuestas incorrectas **fijas** que siempre estarán
+disponibles.
 
 ```c
 /*opciones
@@ -151,10 +202,14 @@ Comportamiento no definido.
 ```
 
 #### `/*distractors*/` (Opcional)
-Define "distractores inteligentes". Son expresiones de Python que se evalúan para generar respuestas incorrectas plausibles, basadas en los valores de las variables dinámicas.
+
+Define "distractores inteligentes". Son expresiones de Python que se evalúan
+para generar respuestas incorrectas plausibles, basadas en los valores de las
+variables dinámicas.
 
 - Las variables se referencian con el formato `__nombre_variable__`.
-- Las líneas que comienzan con `#` son ignoradas y pueden usarse para comentarios o para definir datos auxiliares de Python.
+- Las líneas que comienzan con `#` son ignoradas y pueden usarse para
+  comentarios o para definir datos auxiliares de Python.
 
 ```c
 /*distractors
@@ -167,7 +222,10 @@ __val_a__ * __multiplier__
 ```
 
 #### `/*correcta*/` (Opcional)
-Si este bloque está presente, su contenido se usará como la respuesta correcta **sin compilar ni ejecutar el código**. Es ideal para preguntas conceptuales donde la respuesta es un texto fijo.
+
+Si este bloque está presente, su contenido se usará como la respuesta correcta
+**sin compilar ni ejecutar el código**. Es ideal para preguntas conceptuales
+donde la respuesta es un texto fijo.
 
 ```c
 /*correcta
@@ -220,35 +278,54 @@ __val_a__ + __multiplier__
 
 ## 6. Configuración y Depuración
 
-El script se puede configurar modificando el diccionario `CONFIG` al inicio del archivo.
+El script se puede configurar modificando el diccionario `CONFIG` al inicio del
+archivo.
 
-- **`compilation_error_log`**: Nombre del archivo donde se guardan los errores de compilación de GCC, incluyendo el código que falló.
-- **`parsing_error_log`**: Nombre del archivo donde se guardan los errores de formato de las plantillas (ej: si falta un comentario `//`).
-- **`substitutions`**: Un diccionario para reemplazar automáticamente operadores de C por sus equivalentes Unicode para una mejor visualización en Moodle (ej: `"==": "⩵"`) y hacer más díficil que se obtenga la respuesta copiando y pegando.
+- **`compilation_error_log`**: Nombre del archivo donde se guardan los errores
+  de compilación de GCC, incluyendo el código que falló.
+- **`parsing_error_log`**: Nombre del archivo donde se guardan los errores de
+  formato de las plantillas (ej: si falta un comentario `//`).
+- **`substitutions`**: Un diccionario para reemplazar automáticamente operadores
+  de C por sus equivalentes Unicode para una mejor visualización en Moodle (ej:
+  `"==": "⩵"`) y hacer más díficil que se obtenga la respuesta copiando y
+  pegando.
 
 ### Flujo de Depuración
 
 1. Ejecuta `python3 generador.py`.
-2. Si una plantilla no se procesa, revisa `parsing_errors.log`. El error te indicará qué parte del formato de la plantilla está mal.
-3. Si una plantilla se procesa pero no genera preguntas, revisa `compile_errors.log`. El error de GCC te indicará qué está mal en el código C de la plantilla.
+2. Si una plantilla no se procesa, revisa `parsing_errors.log`. El error te
+   indicará qué parte del formato de la plantilla está mal.
+3. Si una plantilla se procesa pero no genera preguntas, revisa
+   `compile_errors.log`. El error de GCC te indicará qué está mal en el código C
+   de la plantilla.
 
 ## 7. Previsualización del Cuestionario: `preview.html`
 
-El archivo `preview.html` es una herramienta de visualización que permite previsualizar el cuestionario XML generado antes de importarlo en Moodle. Esta herramienta es especialmente útil para revisar el formato, el contenido de las preguntas y verificar que todo se ve correctamente.
+El archivo `preview.html` es una herramienta de visualización que permite
+previsualizar el cuestionario XML generado antes de importarlo en Moodle. Esta
+herramienta es especialmente útil para revisar el formato, el contenido de las
+preguntas y verificar que todo se ve correctamente.
 
 ### 7.1. Características
 
-- **Visualización local**: No requiere servidor web ni Moodle, se ejecuta completamente en el navegador.
-- **Renderizado de Markdown**: Procesa formato Markdown en las preguntas y respuestas, incluyendo bloques de código.
-- **Resaltado de sintaxis**: Utiliza highlight.js para aplicar colores a los bloques de código C.
-- **Organización por categorías**: Muestra la categoría de cada pregunta tal como aparecerá en Moodle.
-- **Modo mezclar**: Parámetro URL `?mix=true` para mostrar las preguntas en orden aleatorio.
-- **Modo respuestas**: Parámetro URL `?answers=true` para resaltar visualmente las respuestas correctas.
+- **Visualización local**: No requiere servidor web ni Moodle, se ejecuta
+  completamente en el navegador.
+- **Renderizado de Markdown**: Procesa formato Markdown en las preguntas y
+  respuestas, incluyendo bloques de código.
+- **Resaltado de sintaxis**: Utiliza highlight.js para aplicar colores a los
+  bloques de código C.
+- **Organización por categorías**: Muestra la categoría de cada pregunta tal
+  como aparecerá en Moodle.
+- **Modo mezclar**: Parámetro URL `?mix=true` para mostrar las preguntas en
+  orden aleatorio.
+- **Modo respuestas**: Parámetro URL `?answers=true` para resaltar visualmente
+  las respuestas correctas.
 
 ### 7.2. Uso
 
 1. Abre el archivo `preview.html` en tu navegador web.
-2. Haz clic en "Seleccionar archivo XML" y elige el archivo XML generado por `generador.py` (por defecto `cuestionario_moodle.xml`).
+2. Haz clic en "Seleccionar archivo XML" y elige el archivo XML generado por
+   `generador.py` (por defecto `cuestionario_moodle.xml`).
 3. El cuestionario se mostrará automáticamente con formato legible.
 
 ### 7.3. Parámetros URL
@@ -263,7 +340,11 @@ preview.html?mix=true&answers=true  # Ambas opciones combinadas
 
 ### 7.4. Casos de Uso
 
-- **Revisión de contenido**: Verificar que los enunciados, el código y las respuestas se ven correctamente.
-- **Control de calidad**: Detectar errores tipográficos o problemas de formato antes de importar a Moodle.
-- **Validación de distractores**: Con `?answers=true`, verificar que las respuestas incorrectas son plausibles y que la correcta es única.
-- **Prueba de variantes**: Revisar rápidamente múltiples variantes de las preguntas generadas.
+- **Revisión de contenido**: Verificar que los enunciados, el código y las
+  respuestas se ven correctamente.
+- **Control de calidad**: Detectar errores tipográficos o problemas de formato
+  antes de importar a Moodle.
+- **Validación de distractores**: Con `?answers=true`, verificar que las
+  respuestas incorrectas son plausibles y que la correcta es única.
+- **Prueba de variantes**: Revisar rápidamente múltiples variantes de las
+  preguntas generadas.
