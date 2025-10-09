@@ -266,7 +266,13 @@ def main():
     parser.add_argument("-o", "--output", default=CONFIG["output_file"], help="Archivo XML de salida")
     parser.add_argument("-n", "--num", type=int, default=CONFIG["questions_per_template"], help="Número de preguntas a generar por plantilla")
     parser.add_argument("-c", "--category", default=CONFIG["moodle_base_category"], help="Categoría base en Moodle")
+    parser.add_argument("-g", "--generate-only", action="store_true", help="Solo generar código C en el directorio 'generated' sin crear XML")
     args = parser.parse_args()
+
+    # Si se especifica --generate-only, solo generamos código C
+    if args.generate_only:
+        generate_c_code_only(args)
+        return
 
     root = Element("quiz")
     
@@ -384,6 +390,115 @@ def main():
         print(f"\n✅ Proceso completado. Se ha creado el archivo '{args.output}'.")
     else:
         print("\n[!] No se encontraron archivos .c en el directorio de origen.")
+
+def generate_c_code_only(args):
+    """
+    Genera solo el código C de las plantillas en el directorio 'generated'.
+    Cada archivo .c genera múltiples variantes en su propio subdirectorio.
+    También crea un Makefile para compilar todos los archivos.
+    """
+    generated_dir = "generated"
+    if os.path.exists(generated_dir):
+        import shutil
+        shutil.rmtree(generated_dir)
+    os.makedirs(generated_dir)
+    
+    makefile_targets = []
+    all_executables = []
+    
+    print(f"🚀 Generando código C en directorio '{generated_dir}'...")
+    
+    for dirpath, dirnames, filenames in os.walk(args.source):
+        if not any(fname.endswith('.c') for fname in filenames):
+            continue
+        
+        relative_path = os.path.relpath(dirpath, args.source)
+        
+        for filename in filenames:
+            if not filename.endswith(".c"):
+                continue
+                
+            filepath = os.path.join(dirpath, filename)
+            print(f"\n📄 Procesando plantilla: {filepath}")
+            
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Purgar comentarios de documentación interna
+            content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+            
+            template_info = parse_c_template(content)
+            if template_info.get("status") == "error":
+                print(f"  [!] No se pudo procesar {filename}. Razón: {template_info.get('reason')}", file=sys.stderr)
+                continue
+            
+            # Crear subdirectorio para este archivo
+            base_name = os.path.splitext(filename)[0]
+            if relative_path != ".":
+                output_subdir = os.path.join(generated_dir, relative_path, base_name)
+            else:
+                output_subdir = os.path.join(generated_dir, base_name)
+            
+            os.makedirs(output_subdir, exist_ok=True)
+            
+            # Generar variantes
+            generated_count = 0
+            attempts = 0
+            generated_variants = set()
+            
+            while generated_count < args.num and attempts < args.num * 5:
+                attempts += 1
+                variables = generate_vars(template_info['var_defs'])
+                variant_id = tuple(sorted(variables.items()))
+                if variant_id in generated_variants:
+                    continue
+                
+                code_instance = template_info['code_template']
+                for name, value in variables.items():
+                    code_instance = code_instance.replace(f"__{name}__", str(value))
+                
+                # Guardar variante
+                variant_filename = f"{base_name}_v{generated_count + 1}.c"
+                variant_path = os.path.join(output_subdir, variant_filename)
+                
+                with open(variant_path, 'w', encoding='utf-8') as f:
+                    f.write(code_instance)
+                
+                # Agregar al makefile
+                relative_variant_path = os.path.relpath(variant_path, generated_dir)
+                executable_name = os.path.splitext(relative_variant_path)[0]
+                makefile_targets.append((relative_variant_path, executable_name))
+                all_executables.append(executable_name)
+                
+                generated_variants.add(variant_id)
+                generated_count += 1
+                print(f"    -> Generada variante {variant_filename}")
+            
+            if generated_count < args.num:
+                print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} variantes únicas.", file=sys.stderr)
+    
+    # Crear Makefile
+    makefile_path = os.path.join(generated_dir, "Makefile")
+    with open(makefile_path, 'w', encoding='utf-8') as f:
+        f.write("# Makefile generado automáticamente\n")
+        f.write("CC = gcc\n")
+        f.write("CFLAGS = -Wall -Wextra\n\n")
+        
+        f.write(f"all: {' '.join(all_executables)}\n\n")
+        
+        for source, executable in makefile_targets:
+            f.write(f"{executable}: {source}\n")
+            f.write(f"\t$(CC) $(CFLAGS) -o $@ $<\n\n")
+        
+        f.write("clean:\n")
+        f.write(f"\trm -f {' '.join(all_executables)}\n\n")
+        
+        f.write(".PHONY: all clean\n")
+    
+    print(f"\n✅ Generación completada.")
+    print(f"   📁 Directorio: {generated_dir}")
+    print(f"   📝 Makefile creado: {makefile_path}")
+    print(f"   🔨 Para compilar: cd {generated_dir} && make")
 
 if __name__ == "__main__":
     main()
