@@ -262,13 +262,90 @@ def create_category_xml(parent, category_path):
     SubElement(SubElement(cat_question, "info", format="moodle_auto_format"), "text").text = ""
     SubElement(cat_question, "idnumber").text = ""
 
+def process_single_template(root, filepath, args):
+    """
+    Procesa un archivo .c individual y genera las preguntas en el XML.
+    """
+    filename = os.path.basename(filepath)
+    
+    # Crear categoría para este archivo individual
+    moodle_category_path = f"$course$/top/{args.category}"
+    create_category_xml(root, moodle_category_path)
+    print(f"\n📁 Creando categoría: {moodle_category_path}")
+    print(f"  📄 Procesando plantilla: {filename}")
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Purgar comentarios de documentación interna
+    content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+
+    template_info = parse_c_template(content)
+    if template_info.get("status") == "error":
+        log_file = CONFIG.get("parsing_error_log")
+        if log_file:
+            with open(log_file, "a", encoding='utf-8') as log:
+                log.write(f"--- PARSE ERROR [{datetime.datetime.now()}] ---\n")
+                log.write(f"File: {filename}\n")
+                log.write(f"Reason: {template_info.get('reason')}\n")
+                log.write("-" * 40 + "\n\n")
+        print(f"  [!] No se pudo procesar {filename}. Razón: {template_info.get('reason')}", file=sys.stderr)
+        return
+    
+    generated_count = 0
+    attempts = 0
+    generated_variants = set()
+
+    while generated_count < args.num and attempts < args.num * 5:
+        attempts += 1
+        variables = generate_vars(template_info['var_defs'])
+        variant_id = tuple(sorted(variables.items()))
+        if variant_id in generated_variants:
+            continue
+
+        code_instance = template_info['code_template']
+        for name, value in variables.items():
+            code_instance = code_instance.replace(f"__{name}__", str(value))
+
+        # Determinar la respuesta correcta: usar la fija o compilar.
+        if template_info.get("fixed_correct_answer"):
+            correct_answer = template_info["fixed_correct_answer"]
+        else:
+            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename)
+            if not result:
+                continue
+            correct_answer = result['output']
+        
+        # Generar opciones incorrectas y crear el XML
+        incorrect_answers = generate_incorrect_answers(
+            correct_answer, 
+            template_info['predefined_options'], 
+            template_info['distractor_expressions'],
+            variables
+        )
+        
+        # Crear una copia del código para visualización con sustituciones
+        display_code_instance = code_instance
+        substitutions = CONFIG.get("substitutions", {})
+        for old, new in substitutions.items():
+            display_code_instance = display_code_instance.replace(old, new)
+
+        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1)
+        generated_variants.add(variant_id)
+        generated_count += 1
+        print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
+
+    if generated_count < args.num:
+        print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} preguntas únicas.", file=sys.stderr)
+
 def main():
     parser = argparse.ArgumentParser(description="Generador de Cuestionarios Moodle XML (validado por XSD) desde plantillas C.")
-    parser.add_argument("-s", "--source", default=CONFIG["source_directory"], help="Directorio con las plantillas .c")
+    parser.add_argument("-s", "--source", default=CONFIG["source_directory"], help="Directorio con las plantillas .c o archivo .c individual")
     parser.add_argument("-o", "--output", default=CONFIG["output_file"], help="Archivo XML de salida")
     parser.add_argument("-n", "--num", type=int, default=CONFIG["questions_per_template"], help="Número de preguntas a generar por plantilla")
     parser.add_argument("-c", "--category", default=CONFIG["moodle_base_category"], help="Categoría base en Moodle")
     parser.add_argument("-g", "--generate-only", action="store_true", help="Solo generar código C en el directorio 'generated' sin crear XML")
+    parser.add_argument("-t", "--template", help="Procesar solo este archivo .c específico (ruta completa o relativa)")
     args = parser.parse_args()
 
     # Si se especifica --generate-only, solo generamos código C
@@ -278,96 +355,115 @@ def main():
 
     root = Element("quiz")
     
-    print(f"Buscando plantillas en: '{args.source}'...")
-    processed_files = 0
-
-    for dirpath, _, filenames in os.walk(args.source):
-        # --- LÓGICA DE CATEGORIZACIÓN ---
-        # 1. Se crea la categoría para el directorio actual ANTES de procesar sus archivos.
-        # Ignorar directorios sin archivos .c para no crear categorías vacías
-        if not any(fname.endswith('.c') for fname in filenames):
-            continue
-
-        relative_path = os.path.relpath(dirpath, args.source)
-        moodle_category_path = f"$course$/top/{args.category}"
-        if relative_path != ".":
-            moodle_category_path += f"/{relative_path.replace(os.sep, '/')}"
+    # Determinar si estamos procesando un archivo individual o un directorio
+    if args.template:
+        # Modo archivo individual
+        if not os.path.isfile(args.template):
+            print(f"Error: El archivo '{args.template}' no existe.", file=sys.stderr)
+            sys.exit(1)
+        if not args.template.endswith('.c'):
+            print(f"Error: El archivo '{args.template}' no es un archivo .c", file=sys.stderr)
+            sys.exit(1)
         
-        create_category_xml(root, moodle_category_path)
-        print(f"\n📁 Creando categoría: {moodle_category_path}")
+        print(f"Procesando plantilla individual: '{args.template}'...")
+        process_single_template(root, args.template, args)
+        processed_files = 1
+    else:
+        # Modo directorio (comportamiento original)
+        if not os.path.isdir(args.source):
+            print(f"Error: El directorio '{args.source}' no existe.", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Buscando plantillas en: '{args.source}'...")
+        processed_files = 0
 
-        # 2. Ahora, se procesan todos los archivos .c de este directorio.
-        #    Sus preguntas se añadirán al XML justo después de la declaración de categoría.
-        for filename in filenames:
-            if filename.endswith(".c"):
-                processed_files += 1
-                filepath = os.path.join(dirpath, filename)
-                print(f"  📄 Procesando plantilla: {filename}")
+        for dirpath, _, filenames in os.walk(args.source):
+            # --- LÓGICA DE CATEGORIZACIÓN ---
+            # 1. Se crea la categoría para el directorio actual ANTES de procesar sus archivos.
+            # Ignorar directorios sin archivos .c para no crear categorías vacías
+            if not any(fname.endswith('.c') for fname in filenames):
+                continue
 
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                # --- CAMBIO PRINCIPAL AQUÍ ---
-                # Se purgan todos los comentarios de documentación interna (//#) al inicio.
-                content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+            relative_path = os.path.relpath(dirpath, args.source)
+            moodle_category_path = f"$course$/top/{args.category}"
+            if relative_path != ".":
+                moodle_category_path += f"/{relative_path.replace(os.sep, '/')}"
+            
+            create_category_xml(root, moodle_category_path)
+            print(f"\n📁 Creando categoría: {moodle_category_path}")
 
-                template_info = parse_c_template(content)
-                if template_info.get("status") == "error":
-                    log_file = CONFIG.get("parsing_error_log")
-                    if log_file:
-                        with open(log_file, "a", encoding='utf-8') as log:
-                            log.write(f"--- PARSE ERROR [{datetime.datetime.now()}] ---\n")
-                            log.write(f"File: {filename}\n")
-                            log.write(f"Reason: {template_info.get('reason')}\n")
-                            log.write("-" * 40 + "\n\n")
-                    print(f"  [!] No se pudo procesar {filename}. Saltando. Razón: {template_info.get('reason')}", file=sys.stderr)
-                    continue
-                
-                generated_count = 0
-                attempts = 0
-                generated_variants = set()
+            # 2. Ahora, se procesan todos los archivos .c de este directorio.
+            #    Sus preguntas se añadirán al XML justo después de la declaración de categoría.
+            for filename in filenames:
+                if filename.endswith(".c"):
+                    processed_files += 1
+                    filepath = os.path.join(dirpath, filename)
+                    print(f"  📄 Procesando plantilla: {filename}")
 
-                while generated_count < args.num and attempts < args.num * 5:
-                    attempts += 1
-                    variables = generate_vars(template_info['var_defs'])
-                    variant_id = tuple(sorted(variables.items()))
-                    if variant_id in generated_variants:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # --- CAMBIO PRINCIPAL AQUÍ ---
+                    # Se purgan todos los comentarios de documentación interna (//#) al inicio.
+                    content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+
+                    template_info = parse_c_template(content)
+                    if template_info.get("status") == "error":
+                        log_file = CONFIG.get("parsing_error_log")
+                        if log_file:
+                            with open(log_file, "a", encoding='utf-8') as log:
+                                log.write(f"--- PARSE ERROR [{datetime.datetime.now()}] ---\n")
+                                log.write(f"File: {filename}\n")
+                                log.write(f"Reason: {template_info.get('reason')}\n")
+                                log.write("-" * 40 + "\n\n")
+                        print(f"  [!] No se pudo procesar {filename}. Saltando. Razón: {template_info.get('reason')}", file=sys.stderr)
                         continue
                     
-                    code_instance = template_info['code_template']
-                    for name, value in variables.items():
-                        code_instance = code_instance.replace(f"__{name}__", str(value))
-                    
-                    # Determinar la respuesta correcta: usar la fija o compilar.
-                    if template_info.get("fixed_correct_answer"):
-                        correct_answer = template_info["fixed_correct_answer"]
-                    else:
-                        result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename)
-                        if not result:
+                    generated_count = 0
+                    attempts = 0
+                    generated_variants = set()
+
+                    while generated_count < args.num and attempts < args.num * 5:
+                        attempts += 1
+                        variables = generate_vars(template_info['var_defs'])
+                        variant_id = tuple(sorted(variables.items()))
+                        if variant_id in generated_variants:
                             continue
-                        correct_answer = result['output']
-                    
-                    # Generar opciones incorrectas y crear el XML
-                    incorrect_answers = generate_incorrect_answers(
-                        correct_answer, 
-                        template_info['predefined_options'], 
-                        template_info['distractor_expressions'],
-                        variables
-                    )
-                    
-                    # Crear una copia del código para visualización con sustituciones
-                    display_code_instance = code_instance
-                    substitutions = CONFIG.get("substitutions", {})
-                    for old, new in substitutions.items():
-                        display_code_instance = display_code_instance.replace(old, new)
+                        
+                        code_instance = template_info['code_template']
+                        for name, value in variables.items():
+                            code_instance = code_instance.replace(f"__{name}__", str(value))
+                        
+                        # Determinar la respuesta correcta: usar la fija o compilar.
+                        if template_info.get("fixed_correct_answer"):
+                            correct_answer = template_info["fixed_correct_answer"]
+                        else:
+                            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename)
+                            if not result:
+                                continue
+                            correct_answer = result['output']
+                        
+                        # Generar opciones incorrectas y crear el XML
+                        incorrect_answers = generate_incorrect_answers(
+                            correct_answer, 
+                            template_info['predefined_options'], 
+                            template_info['distractor_expressions'],
+                            variables
+                        )
+                        
+                        # Crear una copia del código para visualización con sustituciones
+                        display_code_instance = code_instance
+                        substitutions = CONFIG.get("substitutions", {})
+                        for old, new in substitutions.items():
+                            display_code_instance = display_code_instance.replace(old, new)
 
-                    create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1)
-                    generated_variants.add(variant_id)
-                    generated_count += 1
-                    print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
+                        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1)
+                        generated_variants.add(variant_id)
+                        generated_count += 1
+                        print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
 
-                if generated_count < args.num:
-                     print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} preguntas únicas.", file=sys.stderr)
+                    if generated_count < args.num:
+                         print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} preguntas únicas.", file=sys.stderr)
 
     if processed_files > 0:
         indent(root)
@@ -398,6 +494,7 @@ def generate_c_code_only(args):
     Genera solo el código C de las plantillas en el directorio 'generated'.
     Cada archivo .c genera múltiples variantes en su propio subdirectorio.
     También crea un Makefile para compilar todos los archivos.
+    Soporta tanto directorios como archivos individuales.
     """
     generated_dir = "generated"
     if os.path.exists(generated_dir):
@@ -410,74 +507,92 @@ def generate_c_code_only(args):
     
     print(f"🚀 Generando código C en directorio '{generated_dir}'...")
     
-    for dirpath, dirnames, filenames in os.walk(args.source):
-        if not any(fname.endswith('.c') for fname in filenames):
+    # Determinar si estamos procesando un archivo individual o un directorio
+    if args.template:
+        # Modo archivo individual
+        if not os.path.isfile(args.template):
+            print(f"Error: El archivo '{args.template}' no existe.", file=sys.stderr)
+            return
+        if not args.template.endswith('.c'):
+            print(f"Error: El archivo '{args.template}' no es un archivo .c", file=sys.stderr)
+            return
+        
+        files_to_process = [(args.template, os.path.dirname(args.template) or ".")]
+    else:
+        # Modo directorio: recolectar todos los archivos .c
+        files_to_process = []
+        for dirpath, dirnames, filenames in os.walk(args.source):
+            for filename in filenames:
+                if filename.endswith(".c"):
+                    filepath = os.path.join(dirpath, filename)
+                    files_to_process.append((filepath, dirpath))
+    
+    # Procesar todos los archivos
+    for filepath, dirpath in files_to_process:
+        filename = os.path.basename(filepath)
+        print(f"\n📄 Procesando plantilla: {filepath}")
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Purgar comentarios de documentación interna
+        content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+        
+        template_info = parse_c_template(content)
+        if template_info.get("status") == "error":
+            print(f"  [!] No se pudo procesar {filename}. Razón: {template_info.get('reason')}", file=sys.stderr)
             continue
         
-        relative_path = os.path.relpath(dirpath, args.source)
-        
-        for filename in filenames:
-            if not filename.endswith(".c"):
-                continue
-                
-            filepath = os.path.join(dirpath, filename)
-            print(f"\n📄 Procesando plantilla: {filepath}")
-            
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Purgar comentarios de documentación interna
-            content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
-            
-            template_info = parse_c_template(content)
-            if template_info.get("status") == "error":
-                print(f"  [!] No se pudo procesar {filename}. Razón: {template_info.get('reason')}", file=sys.stderr)
-                continue
-            
-            # Crear subdirectorio para este archivo
-            base_name = os.path.splitext(filename)[0]
+        # Crear subdirectorio para este archivo
+        base_name = os.path.splitext(filename)[0]
+        if args.template:
+            # Para archivo individual, usar solo el nombre base
+            output_subdir = os.path.join(generated_dir, base_name)
+        else:
+            # Para directorio, mantener la estructura
+            relative_path = os.path.relpath(dirpath, args.source)
             if relative_path != ".":
                 output_subdir = os.path.join(generated_dir, relative_path, base_name)
             else:
                 output_subdir = os.path.join(generated_dir, base_name)
+        
+        os.makedirs(output_subdir, exist_ok=True)
+        
+        # Generar variantes
+        generated_count = 0
+        attempts = 0
+        generated_variants = set()
+        
+        while generated_count < args.num and attempts < args.num * 5:
+            attempts += 1
+            variables = generate_vars(template_info['var_defs'])
+            variant_id = tuple(sorted(variables.items()))
+            if variant_id in generated_variants:
+                continue
             
-            os.makedirs(output_subdir, exist_ok=True)
+            code_instance = template_info['code_template']
+            for name, value in variables.items():
+                code_instance = code_instance.replace(f"__{name}__", str(value))
             
-            # Generar variantes
-            generated_count = 0
-            attempts = 0
-            generated_variants = set()
+            # Guardar variante
+            variant_filename = f"{base_name}_v{generated_count + 1}.c"
+            variant_path = os.path.join(output_subdir, variant_filename)
             
-            while generated_count < args.num and attempts < args.num * 5:
-                attempts += 1
-                variables = generate_vars(template_info['var_defs'])
-                variant_id = tuple(sorted(variables.items()))
-                if variant_id in generated_variants:
-                    continue
-                
-                code_instance = template_info['code_template']
-                for name, value in variables.items():
-                    code_instance = code_instance.replace(f"__{name}__", str(value))
-                
-                # Guardar variante
-                variant_filename = f"{base_name}_v{generated_count + 1}.c"
-                variant_path = os.path.join(output_subdir, variant_filename)
-                
-                with open(variant_path, 'w', encoding='utf-8') as f:
-                    f.write(code_instance)
-                
-                # Agregar al makefile
-                relative_variant_path = os.path.relpath(variant_path, generated_dir)
-                executable_name = os.path.splitext(relative_variant_path)[0]
-                makefile_targets.append((relative_variant_path, executable_name))
-                all_executables.append(executable_name)
-                
-                generated_variants.add(variant_id)
-                generated_count += 1
-                print(f"    -> Generada variante {variant_filename}")
+            with open(variant_path, 'w', encoding='utf-8') as f:
+                f.write(code_instance)
             
-            if generated_count < args.num:
-                print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} variantes únicas.", file=sys.stderr)
+            # Agregar al makefile
+            relative_variant_path = os.path.relpath(variant_path, generated_dir)
+            executable_name = os.path.splitext(relative_variant_path)[0]
+            makefile_targets.append((relative_variant_path, executable_name))
+            all_executables.append(executable_name)
+            
+            generated_variants.add(variant_id)
+            generated_count += 1
+            print(f"    -> Generada variante {variant_filename}")
+        
+        if generated_count < args.num:
+            print(f"    [!] Advertencia: Solo se generaron {generated_count}/{args.num} variantes únicas.", file=sys.stderr)
     
     # Crear Makefile
     makefile_path = os.path.join(generated_dir, "Makefile")

@@ -54,11 +54,37 @@ El script se ejecuta desde la línea de comandos:
 - **`-c` o `--category`**: El nombre de la categoría raíz bajo la cual se
   organizarán las preguntas en Moodle. Por defecto es
   `programacion1_gen_codigo`.
+- **`-t` o `--template`**: Procesar solo un archivo `.c` específico en lugar de
+  un directorio completo. Acepta rutas absolutas o relativas. Útil para probar
+  una plantilla individual antes de procesar todas.
 - **`-g` o `--generate-only`**: Solo genera código C en el directorio
   `generated` sin crear el XML de Moodle. Útil para verificar el funcionamiento
   de las plantillas.
 
-### Modo de Verificación: Generación de Código C
+### 2.1. Procesamiento de Plantilla Individual
+
+El argumento `-t` o `--template` permite procesar un solo archivo `.c` en lugar de un directorio completo. Esto es especialmente útil cuando:
+
+- Estás desarrollando o probando una nueva plantilla
+- Necesitas regenerar rápidamente preguntas de una plantilla específica
+- Quieres verificar cambios en una plantilla sin procesar todas
+
+**Ejemplos de uso:**
+
+```bash
+# Generar XML para una sola plantilla
+python3 generador.py -t templates/punteros/basico.c -o test.xml -n 3
+
+# Generar código C de una sola plantilla para verificación
+python3 generador.py -g -t templates/punteros/basico.c -n 5
+
+# Usar ruta relativa
+python3 generador.py -t ./templates/arrays/ejercicio1.c
+```
+
+**Nota:** Cuando se usa `-t`, el argumento `-s` es ignorado, ya que se procesa el archivo especificado directamente.
+
+### 2.2. Modo de Verificación: Generación de Código C
 
 El argumento `-g` o `--generate-only` permite generar solo el código C de las
 plantillas sin crear el archivo XML de Moodle. Este modo es útil para:
