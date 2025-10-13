@@ -234,18 +234,36 @@ para generar respuestas incorrectas plausibles, basadas en los valores de las
 variables dinámicas.
 
 - Las variables se referencian con el formato `__nombre_variable__`.
-- Las líneas que comienzan con `#` son ignoradas y pueden usarse para
-  comentarios o para definir datos auxiliares de Python.
+- Las líneas que comienzan con `//#` son comentarios de documentación interna y se ignoran.
+- **Las líneas que comienzan con `#` seguido de espacio son expresiones Python evaluables** que se procesan para generar distractores dinámicos.
+- Las líneas sin `#` también son expresiones evaluables (sin el prefijo).
+
+**Ejemplo básico:**
 
 ```c
 /*distractors
-# Error común de precedencia: a + (b * c)
-__val_a__ + __val_b__ * __multiplier__
-
-# Olvidar la suma
-__val_a__ * __multiplier__
+//#  Esto es un comentario que se ignora
+__val_a__ + __val_b__
+__val_a__ * __val_b__
 */
 ```
+
+**Ejemplo con expresiones condicionales:**
+
+```c
+/*var
+file_mode: ['"w"', '"a"']
+valor_1: range(100, 200)
+valor_2: range(300, 400)
+*/
+
+/*distractors
+# __valor_1__ if __file_mode__ == '"w"' else -1
+# __valor_2__ if __file_mode__ == '"a"' else -1
+*/
+```
+
+En este ejemplo, los distractores dependen del valor de `file_mode`, generando respuestas incorrectas contextuales según la variante.
 
 #### `/*correcta*/` (Opcional)
 
@@ -253,11 +271,114 @@ Si este bloque está presente, su contenido se usará como la respuesta correcta
 **sin compilar ni ejecutar el código**. Es ideal para preguntas conceptuales
 donde la respuesta es un texto fijo.
 
+**Respuesta fija:**
+
 ```c
 /*correcta
 Se produce un error de compilación.
 */
 ```
+
+**Respuesta evaluable con expresión Python:**
+
+Si la primera línea (sin comentarios `//#`) comienza con `#`, se interpreta como una expresión Python evaluable:
+
+```c
+/*var
+file_mode: ['"w"', '"a"']
+valor_run1: range(100, 200)
+valor_run2: range(300, 400)
+*/
+
+/*correcta
+# __valor_run2__ if __file_mode__ == '"w"' else __valor_run1__
+*/
+```
+
+En este ejemplo, la respuesta correcta depende del modo de apertura del archivo: si es `"w"` (write), la respuesta es `valor_run2`; si es `"a"` (append), es `valor_run1`.
+
+#### `/*STDIN*/` (Opcional)
+
+Define la entrada estándar (stdin) que se proporcionará al programa durante su ejecución. Este bloque es especialmente útil para programas que requieren interacción con el usuario a través de funciones como `scanf`, `fgets`, `getchar`, etc.
+
+**Cuando se utiliza STDIN:**
+- El contenido se pasa al programa durante su compilación y ejecución para obtener la respuesta correcta.
+- **Se muestra automáticamente en el enunciado de la pregunta** debajo del código, bajo un encabezado "#### Entrada (stdin):", para que el estudiante pueda ver qué entrada recibe el programa.
+
+El bloque soporta:
+- **Texto estático**: Líneas de texto fijo.
+- **Variables dinámicas**: Referencias a variables usando el formato `__nombre_variable__`.
+- **Expresiones f-string**: Uso de llaves `{variable}` para interpolar valores de variables.
+
+**Ejemplo con variables dinámicas:**
+
+```c
+/*var
+num_a: range(1, 10)
+num_b: range(1, 10)
+*/
+
+/*STDIN
+__num_a__
+__num_b__
+*/
+```
+
+**Ejemplo con f-string:**
+
+```c
+/*var
+count: range(2, 5)
+base: range(10, 20)
+*/
+
+/*STDIN
+{count}
+{base}
+{base}
+{base}
+*/
+```
+
+**Ejemplo completo con scanf:**
+
+```c
+// El programa lee dos números y los suma:
+#include <stdio.h>
+int main() {
+    int a, b;
+    scanf("%d", &a);
+    scanf("%d", &b);
+    printf("%d\n", a + b);
+    return 0;
+}
+// ¿Qué valor imprime?
+
+/*var
+num_a: range(1, 10)
+num_b: range(1, 10)
+*/
+
+/*STDIN
+__num_a__
+__num_b__
+*/
+```
+
+En Moodle, el enunciado de la pregunta se verá así:
+```
+Analiza el siguiente código que lee dos números y los suma:
+[código C]
+¿Qué valor imprime?
+
+#### Entrada (stdin):
+```
+15
+16
+```
+```
+
+Cada línea del bloque `/*STDIN*/` se pasará al programa como una línea de entrada estándar. Los comentarios de documentación interna (que empiezan con `//#`) dentro del bloque se ignoran automáticamente.
 
 ## 5. Ejemplo Completo de Plantilla
 
