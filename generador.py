@@ -101,13 +101,42 @@ def parse_c_template(content):
                 lines = distractor_content.split('\n')
                 for line in lines:
                     line = line.strip()
-                    if line and not line.startswith('#'):
-                        distractor_expressions.append(line)
+                    # Ignorar líneas vacías y comentarios de documentación (//#)
+                    if line and not line.startswith('//#'):
+                        # Si empieza con #, remover el # para convertirlo en expresión evaluable
+                        if line.startswith('#'):
+                            distractor_expressions.append(line[1:].strip())
+                        elif line:
+                            distractor_expressions.append(line)
 
         correcta_match = re.search(r"/\*correcta\s*(.*?)\*/", content, re.DOTALL)
         fixed_correct_answer = None
+        correct_answer_expression = None
         if correcta_match:
-            fixed_correct_answer = correcta_match.group(1).strip()
+            correcta_content = correcta_match.group(1).strip()
+            # Eliminar comentarios de documentación interna
+            lines = correcta_content.split('\n')
+            clean_lines = [line for line in lines if line.strip() and not line.strip().startswith('//#')]
+            
+            if clean_lines:
+                # Si la primera línea empieza con #, es una expresión evaluable
+                if clean_lines[0].strip().startswith('#'):
+                    # Remover el # y usar como expresión
+                    correct_answer_expression = clean_lines[0].strip()[1:].strip()
+                else:
+                    # Es un valor fijo
+                    fixed_correct_answer = '\n'.join(clean_lines)
+
+        # --- Lectura de sección STDIN (opcional) ---
+        stdin_match = re.search(r"/\*STDIN\s*(.*?)\*/", content, re.DOTALL)
+        stdin_template = None
+        if stdin_match:
+            stdin_content = stdin_match.group(1).strip()
+            if stdin_content:
+                # Eliminar comentarios de documentación interna
+                lines = stdin_content.split('\n')
+                stdin_lines = [line for line in lines if line.strip() and not line.strip().startswith('//#')]
+                stdin_template = '\n'.join(stdin_lines)
 
         return {
             "status": "success",
@@ -117,7 +146,9 @@ def parse_c_template(content):
             "predefined_options": predefined_options,
             "distractor_expressions": distractor_expressions,
             "name": question_name,
-            "fixed_correct_answer": fixed_correct_answer
+            "fixed_correct_answer": fixed_correct_answer,
+            "correct_answer_expression": correct_answer_expression,
+            "stdin_template": stdin_template
         }
     except Exception as e:
         return {"status": "error", "reason": str(e)}
@@ -134,8 +165,45 @@ def generate_vars(var_defs):
             generated[name] = ""
     return generated
 
-def compile_and_run_c(code, timeout, template_name=None):
-    """Compila y ejecuta un string de código C."""
+def generate_stdin(stdin_template, variables):
+    """
+    Genera el contenido de STDIN dinámicamente a partir de una plantilla y variables.
+    Soporta referencias a variables usando el formato __variable__ y expresiones Python con f-string.
+    """
+    if not stdin_template:
+        return None
+    
+    try:
+        # Primero, reemplazar las variables en el template
+        stdin_content = stdin_template
+        for name, value in variables.items():
+            stdin_content = stdin_content.replace(f"__{name}__", str(value))
+        
+        # Procesar cada línea para evaluar expresiones Python si están entre {}
+        # Esto permite usar f-string-like syntax
+        result_lines = []
+        for line in stdin_content.split('\n'):
+            # Si la línea contiene expresiones Python entre {}, evaluarlas
+            if '{' in line and '}' in line:
+                try:
+                    # Crear un contexto con las variables disponibles
+                    eval_context = variables.copy()
+                    # Evaluar la línea como f-string usando eval con el contexto
+                    processed_line = line.format(**eval_context)
+                    result_lines.append(processed_line)
+                except Exception as e:
+                    # Si falla, usar la línea tal cual
+                    result_lines.append(line)
+            else:
+                result_lines.append(line)
+        
+        return '\n'.join(result_lines)
+    except Exception as e:
+        print(f"  [!] Error generando STDIN: {e}", file=sys.stderr)
+        return stdin_template
+
+def compile_and_run_c(code, timeout, template_name=None, stdin_input=None):
+    """Compila y ejecuta un string de código C, opcionalmente con entrada stdin."""
     temp_id = str(uuid.uuid4())
     source_file = f"{temp_id}.c"
     executable_file = f"{temp_id}.out"
@@ -163,6 +231,7 @@ def compile_and_run_c(code, timeout, template_name=None):
         try:
             run_process = subprocess.run(
                 [f"./{executable_file}"],
+                input=stdin_input,
                 capture_output=True, text=True, timeout=timeout, encoding='utf-8'
             )
             if run_process.returncode != 0:
@@ -214,7 +283,7 @@ def generate_incorrect_answers(correct_answer, predefined_options, distractor_ex
     
     return final_incorrect
 
-def create_moodle_question_xml(parent, template_info, code_instance, correct_answer, incorrect_answers, question_number):
+def create_moodle_question_xml(parent, template_info, code_instance, correct_answer, incorrect_answers, question_number, stdin_content=None):
     """Construye el árbol XML para una pregunta, respetando el orden del XSD."""
     q_node = SubElement(parent, "question", type="multichoice")
     
@@ -225,6 +294,12 @@ def create_moodle_question_xml(parent, template_info, code_instance, correct_ans
     
     questiontext_node = SubElement(SubElement(q_node, "questiontext", format="markdown"), "text")
     question_text_with_code = template_info['question_text_template'].replace("{code}", code_instance)
+    
+    # Agregar STDIN si está presente
+    if stdin_content:
+        stdin_section = f"\n\n#### Entrada (stdin):\n```\n{stdin_content}\n```"
+        question_text_with_code += stdin_section
+    
     questiontext_node.text = CDATA(question_text_with_code)
 
     SubElement(SubElement(q_node, "generalfeedback", format="markdown"), "text").text = CDATA("")
@@ -307,11 +382,27 @@ def process_single_template(root, filepath, args):
         for name, value in variables.items():
             code_instance = code_instance.replace(f"__{name}__", str(value))
 
-        # Determinar la respuesta correcta: usar la fija o compilar.
-        if template_info.get("fixed_correct_answer"):
+        # Generar STDIN si existe en la plantilla
+        stdin_input = None
+        if template_info.get('stdin_template'):
+            stdin_input = generate_stdin(template_info['stdin_template'], variables)
+
+        # Determinar la respuesta correcta: evaluar expresión, usar fija, o compilar.
+        if template_info.get("correct_answer_expression"):
+            # Evaluar la expresión con las variables actuales
+            try:
+                expr = template_info["correct_answer_expression"]
+                # Reemplazar variables en la expresión
+                for name, value in variables.items():
+                    expr = expr.replace(f"__{name}__", str(value))
+                correct_answer = str(eval(expr))
+            except Exception as e:
+                print(f"  [!] Error evaluando expresión de respuesta correcta: {e}", file=sys.stderr)
+                continue
+        elif template_info.get("fixed_correct_answer"):
             correct_answer = template_info["fixed_correct_answer"]
         else:
-            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename)
+            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename, stdin_input=stdin_input)
             if not result:
                 continue
             correct_answer = result['output']
@@ -330,7 +421,7 @@ def process_single_template(root, filepath, args):
         for old, new in substitutions.items():
             display_code_instance = display_code_instance.replace(old, new)
 
-        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1)
+        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input)
         generated_variants.add(variant_id)
         generated_count += 1
         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
@@ -434,11 +525,27 @@ def main():
                         for name, value in variables.items():
                             code_instance = code_instance.replace(f"__{name}__", str(value))
                         
-                        # Determinar la respuesta correcta: usar la fija o compilar.
-                        if template_info.get("fixed_correct_answer"):
+                        # Generar STDIN si existe en la plantilla
+                        stdin_input = None
+                        if template_info.get('stdin_template'):
+                            stdin_input = generate_stdin(template_info['stdin_template'], variables)
+                        
+                        # Determinar la respuesta correcta: evaluar expresión, usar fija, o compilar.
+                        if template_info.get("correct_answer_expression"):
+                            # Evaluar la expresión con las variables actuales
+                            try:
+                                expr = template_info["correct_answer_expression"]
+                                # Reemplazar variables en la expresión
+                                for name, value in variables.items():
+                                    expr = expr.replace(f"__{name}__", str(value))
+                                correct_answer = str(eval(expr))
+                            except Exception as e:
+                                print(f"  [!] Error evaluando expresión de respuesta correcta: {e}", file=sys.stderr)
+                                continue
+                        elif template_info.get("fixed_correct_answer"):
                             correct_answer = template_info["fixed_correct_answer"]
                         else:
-                            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename)
+                            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename, stdin_input=stdin_input)
                             if not result:
                                 continue
                             correct_answer = result['output']
@@ -457,7 +564,7 @@ def main():
                         for old, new in substitutions.items():
                             display_code_instance = display_code_instance.replace(old, new)
 
-                        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1)
+                        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input)
                         generated_variants.add(variant_id)
                         generated_count += 1
                         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
