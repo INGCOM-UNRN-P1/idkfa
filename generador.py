@@ -9,6 +9,8 @@ import uuid
 import sys
 import io
 import datetime
+import tempfile
+import itertools
 from xml.etree.ElementTree import Element, SubElement, ElementTree, indent
 
 # --- CONFIGURACIÓN ---
@@ -18,6 +20,7 @@ CONFIG = {
     "questions_per_template": 5,
     "moodle_base_category": "programacion1_gen_codigo",
     "compiler": "gcc",
+    "compiler_flags": ["-Wall", "-Wextra"],
     "execution_timeout": 3,
     "min_distractors": 3,
     "default_grade": "1.0000000",
@@ -141,6 +144,27 @@ def parse_c_template(content):
                 stdin_lines = [line for line in lines if line.strip() and not line.strip().startswith('//#')]
                 stdin_template = '\n'.join(stdin_lines)
 
+        # --- Validación semántica temprana ---
+        # Si el código C usa funciones de lectura estándar (scanf, fgets, getchar) y no tiene bloque STDIN ni respuesta correcta directa
+        if not stdin_template and not fixed_correct_answer and not correct_answer_expression:
+            if re.search(r'\b(scanf|fgets|getchar|getc|read|fscanf\s*\(\s*stdin)\b', cleaned_code_block):
+                return {
+                    "status": "error",
+                    "reason": "Validación semántica fallida: el código C contiene llamadas a lectura por stdin (scanf/fgets/getchar) pero no define la sección /*STDIN*/ obligatoria."
+                }
+
+        # --- Lectura de flags de compilación (opcional) ---
+        flags_match = re.search(r"/\*flags\s*(.*?)\*/", content, re.DOTALL)
+        custom_flags = []
+        if flags_match:
+            flags_content = flags_match.group(1).strip()
+            if flags_content:
+                custom_flags = [f.strip() for f in flags_content.split() if f.strip()]
+
+        # Detección automática de math.h -> -lm
+        if re.search(r'#include\s*<math\.h>', cleaned_code_block) and "-lm" not in custom_flags:
+            custom_flags.append("-lm")
+
         # --- Lectura de sección penalty (opcional) ---
         penalty_match = re.search(r"/\*penalty\s*(.*?)\*/", content, re.DOTALL)
         penalty = penalty_match.group(1).strip() if penalty_match else None
@@ -173,6 +197,7 @@ def parse_c_template(content):
             "fixed_correct_answer": fixed_correct_answer,
             "correct_answer_expression": correct_answer_expression,
             "stdin_template": stdin_template,
+            "custom_flags": custom_flags,
             "penalty": penalty,
             "default_grade": default_grade,
             "question_type": question_type,
@@ -182,16 +207,85 @@ def parse_c_template(content):
         return {"status": "error", "reason": str(e)}
 
 def generate_vars(var_defs):
-    """Genera un conjunto de valores concretos a partir de las definiciones de variables."""
+    """Genera un conjunto de valores concretos a partir de las definiciones de variables, soportando dependencias."""
     generated = {}
     for name, definition in var_defs.items():
         try:
-            value_pool = eval(definition)
-            generated[name] = random.choice(list(value_pool))
+            # Reemplazar referencias __var__ previas o nombres de variables en el contexto
+            def_str = definition
+            for prev_name, prev_val in generated.items():
+                def_str = def_str.replace(f"__{prev_name}__", str(prev_val))
+            
+            value_pool = eval(def_str, {"__builtins__": __builtins__}, generated)
+            if hasattr(value_pool, '__iter__') and not isinstance(value_pool, (str, bytes)):
+                pool_list = list(value_pool)
+                generated[name] = random.choice(pool_list) if pool_list else ""
+            else:
+                generated[name] = value_pool
         except Exception as e:
             print(f"  [!] Error evaluando la definición de variable '{name}': {e}", file=sys.stderr)
             generated[name] = ""
     return generated
+
+def generate_all_variants_deterministically(var_defs, max_count):
+    """
+    Genera combinaciones deterministas de variables.
+    Si el espacio cartesiano es enumerable y finito, muestrea sin reemplazo.
+    Soporta variables dependientes evaluando en orden topológico secuencial.
+    """
+    if not var_defs:
+        return [{}]
+
+    # Evaluar secuencialmente si no hay dependencias cruzadas complejas
+    var_names = list(var_defs.keys())
+    
+    # Intentar generar dominios discretos
+    static_domains = {}
+    has_dynamic_deps = False
+    
+    for name, definition in var_defs.items():
+        # Verificar si referencia variables anteriores
+        if any(f"__{prev}__" in definition or re.search(rf'\b{prev}\b', definition) for prev in static_domains):
+            has_dynamic_deps = True
+            break
+        try:
+            val = eval(definition, {"__builtins__": __builtins__}, {})
+            if hasattr(val, '__iter__') and not isinstance(val, (str, bytes)):
+                val_list = list(val)
+                if len(val_list) > 1000:  # Dominio excesivamente grande
+                    has_dynamic_deps = True
+                    break
+                static_domains[name] = val_list
+            else:
+                static_domains[name] = [val]
+        except Exception:
+            has_dynamic_deps = True
+            break
+
+    if not has_dynamic_deps and len(static_domains) == len(var_names):
+        keys = list(static_domains.keys())
+        all_combinations = list(itertools.product(*(static_domains[k] for k in keys)))
+        comb_dicts = [dict(zip(keys, prod)) for prod in all_combinations]
+        if len(comb_dicts) <= max_count:
+            random.shuffle(comb_dicts)
+            return comb_dicts
+        return random.sample(comb_dicts, max_count)
+
+    # Fallback con muestreo de deduplicación acotado para dominios dependientes o grandes
+    unique_variants = []
+    seen = set()
+    attempts = 0
+    max_attempts = max_count * 10
+    
+    while len(unique_variants) < max_count and attempts < max_attempts:
+        attempts += 1
+        vars_inst = generate_vars(var_defs)
+        var_key = tuple(sorted(vars_inst.items()))
+        if var_key not in seen:
+            seen.add(var_key)
+            unique_variants.append(vars_inst)
+            
+    return unique_variants
 
 def generate_stdin(stdin_template, variables):
     """
@@ -230,51 +324,57 @@ def generate_stdin(stdin_template, variables):
         print(f"  [!] Error generando STDIN: {e}", file=sys.stderr)
         return stdin_template
 
-def compile_and_run_c(code, timeout, template_name=None, stdin_input=None):
-    """Compila y ejecuta un string de código C, opcionalmente con entrada stdin."""
-    temp_id = str(uuid.uuid4())
-    source_file = f"{temp_id}.c"
-    executable_file = f"{temp_id}.out"
+def compile_and_run_c(code, timeout, template_name=None, stdin_input=None, extra_flags=None, custom_compiler=None, base_flags=None):
+    """Compila y ejecuta un string de código C de forma segura usando tempfile y flags configurables."""
+    compiler = custom_compiler or CONFIG.get("compiler", "gcc")
+    flags = list(base_flags) if base_flags is not None else list(CONFIG.get("compiler_flags", ["-Wall", "-Wextra"]))
+    if extra_flags:
+        for f in extra_flags:
+            if f not in flags:
+                flags.append(f)
 
-    with open(source_file, "w", encoding='utf-8') as f:
-        f.write(code)
+    with tempfile.TemporaryDirectory(prefix="idkfa_build_") as tmp_dir:
+        source_file = os.path.join(tmp_dir, "source.c")
+        executable_file = os.path.join(tmp_dir, "prog.out")
 
-    try:
-        compile_process = subprocess.run(
-            [CONFIG["compiler"], source_file, "-o", executable_file],
-            capture_output=True, text=True, timeout=timeout, encoding='utf-8'
-        )
-        if compile_process.returncode != 0:
-            log_file = CONFIG.get("compilation_error_log")
-            if log_file:
-                with open(log_file, "a", encoding='utf-8') as log:
-                    log.write(f"--- COMPILE ERROR [{datetime.datetime.now()}] ---\n")
-                    if template_name:
-                        log.write(f"Template: {template_name}\n")
-                    log.write(f"Stderr:\n{compile_process.stderr}\n")
-                    log.write(f"Source Code:\n{code}\n")
-                    log.write("-" * 40 + "\n\n")
-            return {"status": "compile_error", "output": "Se produce un error de compilación."}
+        with open(source_file, "w", encoding='utf-8') as f:
+            f.write(code)
 
         try:
-            run_process = subprocess.run(
-                [f"./{executable_file}"],
-                input=stdin_input,
+            cmd = [compiler] + flags + [source_file, "-o", executable_file]
+            compile_process = subprocess.run(
+                cmd,
                 capture_output=True, text=True, timeout=timeout, encoding='utf-8'
             )
-            if run_process.returncode != 0:
-                return {"status": "runtime_error", "output": "Se produce un error en tiempo de ejecución."}
-            
-            return {"status": "success", "output": run_process.stdout.strip()}
+            if compile_process.returncode != 0:
+                log_file = CONFIG.get("compilation_error_log")
+                if log_file:
+                    with open(log_file, "a", encoding='utf-8') as log:
+                        log.write(f"--- COMPILE ERROR [{datetime.datetime.now()}] ---\n")
+                        if template_name:
+                            log.write(f"Template: {template_name}\n")
+                        log.write(f"Command: {' '.join(cmd)}\n")
+                        log.write(f"Stderr:\n{compile_process.stderr}\n")
+                        log.write(f"Source Code:\n{code}\n")
+                        log.write("-" * 40 + "\n\n")
+                return {"status": "compile_error", "output": "Se produce un error de compilación."}
 
-        except subprocess.TimeoutExpired:
-            return {"status": "timeout", "output": "El programa excede el tiempo límite de ejecución."}
+            try:
+                run_process = subprocess.run(
+                    [executable_file],
+                    input=stdin_input,
+                    capture_output=True, text=True, timeout=timeout, encoding='utf-8'
+                )
+                if run_process.returncode != 0:
+                    return {"status": "runtime_error", "output": "Se produce un error en tiempo de ejecución."}
+                
+                return {"status": "success", "output": run_process.stdout.strip()}
 
-    finally:
-        if os.path.exists(source_file):
-            os.remove(source_file)
-        if os.path.exists(executable_file):
-            os.remove(executable_file)
+            except subprocess.TimeoutExpired:
+                return {"status": "timeout", "output": "El programa excede el tiempo límite de ejecución."}
+
+        except Exception as e:
+            return {"status": "error", "output": str(e)}
 
 def normalize_answer_repr(ans):
     """Normaliza la representación de una respuesta para comparación."""
@@ -477,17 +577,15 @@ def process_single_template(root, filepath, args):
         print(f"  [!] No se pudo procesar {filename}. Razón: {template_info.get('reason')}", file=sys.stderr)
         return
     
+    # Obtener variantes deterministas
+    variants = generate_all_variants_deterministically(template_info['var_defs'], args.num)
     generated_count = 0
-    attempts = 0
-    generated_variants = set()
 
-    while generated_count < args.num and attempts < args.num * 5:
-        attempts += 1
-        variables = generate_vars(template_info['var_defs'])
-        variant_id = tuple(sorted(variables.items()))
-        if variant_id in generated_variants:
-            continue
+    # Flags de compilación combinados
+    base_flags = [f.strip() for f in args.cflags.split()] if getattr(args, "cflags", None) else CONFIG.get("compiler_flags", ["-Wall", "-Wextra"])
+    custom_compiler = getattr(args, "compiler", None) or CONFIG.get("compiler", "gcc")
 
+    for variables in variants:
         code_instance = template_info['code_template']
         for name, value in variables.items():
             code_instance = code_instance.replace(f"__{name}__", str(value))
@@ -499,10 +597,8 @@ def process_single_template(root, filepath, args):
 
         # Determinar la respuesta correcta: evaluar expresión, usar fija, o compilar.
         if template_info.get("correct_answer_expression"):
-            # Evaluar la expresión con las variables actuales
             try:
                 expr = template_info["correct_answer_expression"]
-                # Reemplazar variables en la expresión
                 for name, value in variables.items():
                     expr = expr.replace(f"__{name}__", str(value))
                 correct_answer = str(eval(expr))
@@ -512,7 +608,15 @@ def process_single_template(root, filepath, args):
         elif template_info.get("fixed_correct_answer"):
             correct_answer = template_info["fixed_correct_answer"]
         else:
-            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename, stdin_input=stdin_input)
+            result = compile_and_run_c(
+                code_instance, 
+                CONFIG["execution_timeout"], 
+                template_name=filename, 
+                stdin_input=stdin_input,
+                extra_flags=template_info.get("custom_flags"),
+                custom_compiler=custom_compiler,
+                base_flags=base_flags
+            )
             if not result:
                 continue
             correct_answer = result['output']
@@ -538,7 +642,6 @@ def process_single_template(root, filepath, args):
             display_code_instance = display_code_instance.replace(old, new)
 
         create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input, variables=variables, args=args)
-        generated_variants.add(variant_id)
         generated_count += 1
         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
 
@@ -556,6 +659,8 @@ def main():
     parser.add_argument("--penalty", default=None, help="Penalización por defecto para respuestas incorrectas (ej: 0.25)")
     parser.add_argument("--defaultgrade", default=None, help="Calificación por defecto de las preguntas (ej: 1.0)")
     parser.add_argument("--min-distractors", type=int, default=CONFIG["min_distractors"], help="Mínimo de distractores para preguntas de opción múltiple")
+    parser.add_argument("--compiler", default=None, help="Compilador C a utilizar (por defecto: gcc)")
+    parser.add_argument("--cflags", default=None, help="Flags de compilación C adicionales o globales (ej: '-Wall -Wextra -O2')")
     args = parser.parse_args()
 
     # Si se especifica --generate-only, solo generamos código C
@@ -587,6 +692,9 @@ def main():
         print(f"Buscando plantillas en: '{args.source}'...")
         processed_files = 0
 
+        base_flags = [f.strip() for f in args.cflags.split()] if getattr(args, "cflags", None) else CONFIG.get("compiler_flags", ["-Wall", "-Wextra"])
+        custom_compiler = getattr(args, "compiler", None) or CONFIG.get("compiler", "gcc")
+
         for dirpath, _, filenames in os.walk(args.source):
             # --- LÓGICA DE CATEGORIZACIÓN ---
             # 1. Se crea la categoría para el directorio actual ANTES de procesar sus archivos.
@@ -613,8 +721,7 @@ def main():
                     with open(filepath, 'r', encoding='utf-8') as f:
                         content = f.read()
                     
-                    # --- CAMBIO PRINCIPAL AQUÍ ---
-                    # Se purgan todos los comentarios de documentación interna (//#) al inicio.
+                    # Purgar comentarios de documentación interna
                     content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
 
                     template_info = parse_c_template(content)
@@ -629,17 +736,10 @@ def main():
                         print(f"  [!] No se pudo procesar {filename}. Saltando. Razón: {template_info.get('reason')}", file=sys.stderr)
                         continue
                     
+                    variants = generate_all_variants_deterministically(template_info['var_defs'], args.num)
                     generated_count = 0
-                    attempts = 0
-                    generated_variants = set()
 
-                    while generated_count < args.num and attempts < args.num * 5:
-                        attempts += 1
-                        variables = generate_vars(template_info['var_defs'])
-                        variant_id = tuple(sorted(variables.items()))
-                        if variant_id in generated_variants:
-                            continue
-                        
+                    for variables in variants:
                         code_instance = template_info['code_template']
                         for name, value in variables.items():
                             code_instance = code_instance.replace(f"__{name}__", str(value))
@@ -651,10 +751,8 @@ def main():
                         
                         # Determinar la respuesta correcta: evaluar expresión, usar fija, o compilar.
                         if template_info.get("correct_answer_expression"):
-                            # Evaluar la expresión con las variables actuales
                             try:
                                 expr = template_info["correct_answer_expression"]
-                                # Reemplazar variables en la expresión
                                 for name, value in variables.items():
                                     expr = expr.replace(f"__{name}__", str(value))
                                 correct_answer = str(eval(expr))
@@ -664,7 +762,15 @@ def main():
                         elif template_info.get("fixed_correct_answer"):
                             correct_answer = template_info["fixed_correct_answer"]
                         else:
-                            result = compile_and_run_c(code_instance, CONFIG["execution_timeout"], template_name=filename, stdin_input=stdin_input)
+                            result = compile_and_run_c(
+                                code_instance, 
+                                CONFIG["execution_timeout"], 
+                                template_name=filename, 
+                                stdin_input=stdin_input,
+                                extra_flags=template_info.get("custom_flags"),
+                                custom_compiler=custom_compiler,
+                                base_flags=base_flags
+                            )
                             if not result:
                                 continue
                             correct_answer = result['output']
@@ -690,7 +796,6 @@ def main():
                             display_code_instance = display_code_instance.replace(old, new)
 
                         create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input, variables=variables, args=args)
-                        generated_variants.add(variant_id)
                         generated_count += 1
                         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
 
@@ -790,18 +895,11 @@ def generate_c_code_only(args):
         
         os.makedirs(output_subdir, exist_ok=True)
         
-        # Generar variantes
+        # Generar variantes deterministas
+        variants = generate_all_variants_deterministically(template_info['var_defs'], args.num)
         generated_count = 0
-        attempts = 0
-        generated_variants = set()
         
-        while generated_count < args.num and attempts < args.num * 5:
-            attempts += 1
-            variables = generate_vars(template_info['var_defs'])
-            variant_id = tuple(sorted(variables.items()))
-            if variant_id in generated_variants:
-                continue
-            
+        for variables in variants:
             code_instance = template_info['code_template']
             for name, value in variables.items():
                 code_instance = code_instance.replace(f"__{name}__", str(value))
@@ -819,7 +917,6 @@ def generate_c_code_only(args):
             makefile_targets.append((relative_variant_path, executable_name))
             all_executables.append(executable_name)
             
-            generated_variants.add(variant_id)
             generated_count += 1
             print(f"    -> Generada variante {variant_filename}")
         
@@ -828,10 +925,14 @@ def generate_c_code_only(args):
     
     # Crear Makefile
     makefile_path = os.path.join(generated_dir, "Makefile")
+    base_flags = [f.strip() for f in args.cflags.split()] if getattr(args, "cflags", None) else CONFIG.get("compiler_flags", ["-Wall", "-Wextra"])
+    cflags_str = " ".join(base_flags)
+    compiler_cmd = getattr(args, "compiler", None) or CONFIG.get("compiler", "gcc")
+
     with open(makefile_path, 'w', encoding='utf-8') as f:
         f.write("# Makefile generado automáticamente\n")
-        f.write("CC = gcc\n")
-        f.write("CFLAGS = -Wall -Wextra\n\n")
+        f.write(f"CC = {compiler_cmd}\n")
+        f.write(f"CFLAGS = {cflags_str}\n\n")
         
         f.write(f"all: {' '.join(all_executables)}\n\n")
         

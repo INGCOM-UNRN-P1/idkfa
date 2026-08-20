@@ -25,6 +25,8 @@ python3 generador.py [options]
 *   `--penalty`: Default penalty fraction for wrong answers (e.g. `0.25`). Defaults to `0.3333333`.
 *   `--defaultgrade`: Default question grade (e.g. `1.0`). Defaults to `1.0000000`.
 *   `--min-distractors`: Minimum number of distractors for multichoice questions. Defaults to `3`.
+*   `--compiler`: C compiler binary to use (e.g. `gcc`, `clang`). Defaults to `gcc`.
+*   `--cflags`: Global C compilation flags (e.g. `"-Wall -Wextra -O2"`). Defaults to `"-Wall -Wextra"`.
 
 ## Example
 
@@ -50,10 +52,11 @@ Metadata is defined within `/* section ... */` comment blocks:
 
 *   `/*name*/`: (Mandatory) Defines the base name of the question in Moodle.
 *   `/*type*/`: (Optional) Question type: `multichoice` (default), `shortanswer`, or `numerical`.
+*   `/*flags*/`: (Optional) Custom compiler flags for this template (e.g. `-lm -O2`). Note that `<math.h>` automatically appends `-lm`.
 *   `/*penalty*/`: (Optional) Custom penalty fraction for incorrect attempts (e.g. `0.25`).
 *   `/*defaultgrade*/`: (Optional) Custom default grade for the question (e.g. `2.0`).
 *   `/*feedback*/`: (Optional) Dynamic pedagogical feedback displayed after question completion. Supports dynamic variables (`__var__` or `{var * 2}`).
-*   `/*var*/`: (Optional) Defines dynamic variables using Python expressions (e.g., `variable_name: range(min, max)`).
+*   `/*var*/`: (Optional) Defines dynamic variables using Python expressions (e.g., `variable_name: range(min, max)`). Supports dependent variables referencing previous variables (`b: range(__a__ + 1, 10)`).
 *   `/*opciones*/`: (Optional) Provides a list of fixed incorrect answer options.
 *   `/*distractors*/`: (Optional) Defines "smart distractors" using Python expressions that generate plausible incorrect answers based on dynamic variables. Lines starting with `//#` are comments. Lines starting with `# ` (hash followed by space) are treated as evaluable Python expressions.
 *   `/*correcta*/`: (Optional) If present, its content is used as the correct answer directly, bypassing code compilation and execution. Can be a fixed text value or an evaluable Python expression (if the first line starts with `# `). Useful for conceptual questions or conditional answers.

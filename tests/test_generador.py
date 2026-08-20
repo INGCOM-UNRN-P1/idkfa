@@ -964,8 +964,85 @@ El valor de a es __a__ y el doble es {a * 2}.
         q_node = root.find("question")
         self.assertEqual(q_node.find("generalfeedback/text").text, "<![CDATA[El valor de a es 5 y el doble es 10.]]>")
 
+    def test_safe_temp_files_compile_and_run(self):
+        """Test compile_and_run_c executes safely and leaves no temporary files in cwd."""
+        code = '#include <stdio.h>\nint main() { printf("ok"); return 0; }'
+        before_files = set(os.listdir('.'))
+        result = generador.compile_and_run_c(code, timeout=3)
+        after_files = set(os.listdir('.'))
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["output"], "ok")
+        # No extra .c or .out files left in cwd
+        new_files = [f for f in (after_files - before_files) if f.endswith('.c') or f.endswith('.out')]
+        self.assertEqual(new_files, [])
+
+    def test_semantic_validation_early_check(self):
+        """Test semantic validation fails when scanf is present without STDIN or fixed answer."""
+        template_bad = """// Question
+#include <stdio.h>
+int main() { int x; scanf("%d", &x); printf("%d", x); return 0; }
+// Answer
+
+/*name
+Scanf Without Stdin
+*/
+"""
+        parsed = generador.parse_c_template(template_bad)
+        self.assertEqual(parsed["status"], "error")
+        self.assertIn("Validación semántica", parsed["reason"])
+
+        # Should succeed if STDIN is provided
+        template_good = template_bad + "\n/*STDIN\n42\n*/\n"
+        parsed_good = generador.parse_c_template(template_good)
+        self.assertEqual(parsed_good["status"], "success")
+
+    def test_dependent_variables_generation(self):
+        """Test dependent variables generation where var_b depends on var_a."""
+        var_defs = {
+            "a": "range(5, 6)",       # a is 5
+            "b": "range(__a__ + 1, __a__ + 3)" # b in [6, 7]
+        }
+        res = generador.generate_vars(var_defs)
+        self.assertEqual(res["a"], 5)
+        self.assertIn(res["b"], [6, 7])
+
+    def test_deterministic_variants_generation(self):
+        """Test deterministic Cartesian product generation."""
+        var_defs = {
+            "x": "[1, 2]",
+            "y": "[10, 20]"
+        }
+        # Cartesian product has 4 elements
+        variants = generador.generate_all_variants_deterministically(var_defs, max_count=4)
+        self.assertEqual(len(variants), 4)
+        unique_keys = set(tuple(sorted(v.items())) for v in variants)
+        self.assertEqual(len(unique_keys), 4)
+
+    def test_configurable_compiler_flags_and_math_lib(self):
+        """Test custom flags and auto math library detection."""
+        template_math = """// Question
+#include <stdio.h>
+#include <math.h>
+int main() { printf("%.0f", sqrt(16.0)); return 0; }
+// Answer
+
+/*name
+Math Sqrt Test
+*/
+"""
+        parsed = generador.parse_c_template(template_math)
+        self.assertIn("-lm", parsed["custom_flags"])
+        result = generador.compile_and_run_c(
+            parsed["code_template"], 
+            timeout=3, 
+            extra_flags=parsed["custom_flags"]
+        )
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["output"], "4")
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
