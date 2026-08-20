@@ -196,13 +196,15 @@ def generate_incorrect_answers(
 
         temp_expr = expr
         try:
+            eval_context = {}
             for var_name, var_value in variables.items():
-                if isinstance(var_value, (int, float)):
-                    temp_expr = temp_expr.replace(f"__{var_name}__", str(var_value))
+                temp_expr = temp_expr.replace(f"__{var_name}__", str(var_value))
+                eval_context[var_name] = var_value
+                eval_context[f"__{var_name}__"] = var_value
             
-            # Evaluar pasando variables como contexto global/local
+            # Evaluar pasando variables y funciones auxiliares
             eval_globals = {"__builtins__": __builtins__, "chr": chr, "ord": ord, "int": int, "float": float, "str": str, "bin": bin, "hex": hex}
-            calculated_value = eval(temp_expr, eval_globals, dict(variables))
+            calculated_value = eval(temp_expr, eval_globals, eval_context)
             calc_str = str(calculated_value).strip()
             norm_calc = normalize_answer_repr(calc_str)
             
