@@ -14,7 +14,8 @@ def compile_and_run_c(
     stdin_input: Optional[str] = None, 
     extra_flags: Optional[List[str]] = None, 
     custom_compiler: Optional[str] = None, 
-    base_flags: Optional[List[str]] = None
+    base_flags: Optional[List[str]] = None,
+    log_file: Optional[str] = None
 ) -> Dict[str, Any]:
     """Compila y ejecuta un string de código C de forma segura usando tempfile y flags configurables."""
     compiler = custom_compiler or CONFIG.get("compiler", "gcc")
@@ -38,9 +39,9 @@ def compile_and_run_c(
                 capture_output=True, text=True, timeout=timeout, encoding='utf-8'
             )
             if compile_process.returncode != 0:
-                log_file = CONFIG.get("compilation_error_log")
-                if log_file:
-                    with open(log_file, "a", encoding='utf-8') as log:
+                target_log = log_file or CONFIG.get("compilation_error_log")
+                if target_log:
+                    with open(target_log, "a", encoding='utf-8') as log:
                         log.write(f"--- COMPILE ERROR [{datetime.datetime.now()}] ---\n")
                         if template_name:
                             log.write(f"Template: {template_name}\n")

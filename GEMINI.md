@@ -69,7 +69,4 @@ Metadata is defined within `/* section ... */` comment blocks:
 
 ## Error Logging
 
-The script generates two log files for debugging:
-
-*   `compile_errors.log`: Records GCC compilation errors for C code templates.
-*   `parsing_errors.log`: Records errors related to the formatting or structure of the C templates.
+By default, errors (parsing and C compilation failures) are recorded in a log file matching the output filename with the `.log` extension (e.g. `cuestionario_moodle.log` for `-o cuestionario_moodle.xml`). A custom log path can be specified using the `--log-file` argument.

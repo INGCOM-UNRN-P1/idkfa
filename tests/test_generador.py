@@ -1165,9 +1165,32 @@ Distractor Feedback Test
         self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_gender, {"gen": "f"}), "El usuario está registrada.")
         self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_gender, {"gen": "m"}), "El usuario está registrado.")
 
+    def test_log_file_matches_output_name(self):
+        """Test that log file is created with the same base name as output XML."""
+        with tempfile.TemporaryDirectory(prefix="test_log_") as tmpdir:
+            bad_template = os.path.join(tmpdir, "bad.c")
+            with open(bad_template, "w", encoding="utf-8") as f:
+                f.write("// Question\n#include <stdio.h>\nint main() { syntax_error; return 0; }\n// Answer\n/*name Bad*/\n")
+
+            out_xml = os.path.join(tmpdir, "mi_banco_preguntas.xml")
+            expected_log = os.path.join(tmpdir, "mi_banco_preguntas.log")
+
+            subprocess.run([
+                'python3', 'generador.py',
+                '-t', bad_template,
+                '-o', out_xml,
+                '-n', '1'
+            ], cwd=os.path.dirname(os.path.dirname(__file__)), capture_output=True, text=True)
+
+            self.assertTrue(os.path.exists(expected_log), f"Log file {expected_log} was not created")
+            with open(expected_log, "r", encoding="utf-8") as f:
+                log_content = f.read()
+            self.assertIn("COMPILE ERROR", log_content)
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

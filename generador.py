@@ -53,7 +53,15 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
     content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
     template_info = parse_c_template(content)
     
+    log_file_path = args_dict.get("log_file") or f"{os.path.splitext(args_dict.get('output', 'cuestionario_moodle.xml'))[0]}.log"
+
     if template_info.get("status") == "error":
+        if log_file_path:
+            with open(log_file_path, "a", encoding='utf-8') as log:
+                log.write(f"--- PARSE ERROR [{datetime.datetime.now()}] ---\n")
+                log.write(f"File: {filename}\n")
+                log.write(f"Reason: {template_info.get('reason')}\n")
+                log.write("-" * 40 + "\n\n")
         return {
             "status": "error",
             "filepath": filepath,
@@ -95,7 +103,8 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
                 stdin_input=stdin_input,
                 extra_flags=template_info.get("custom_flags"),
                 custom_compiler=custom_compiler,
-                base_flags=base_flags
+                base_flags=base_flags,
+                log_file=log_file_path
             )
             if not result or result.get("status") != "success":
                 continue
@@ -257,7 +266,14 @@ def main() -> None:
     parser.add_argument("--config", default=None, help="Ruta a archivo de configuración JSON personalizada")
     parser.add_argument("--jobs", "-j", type=int, default=1, help="Número de procesos concurrentes para compilación y generación (default: 1)")
     parser.add_argument("--check", "--dry-run", dest="dry_run", action="store_true", help="Modo validación rápida: verifica sintaxis y compilación sin generar XML")
+    parser.add_argument("--log-file", default=None, help="Ruta al archivo de log (por defecto: mismo nombre que el archivo de salida con extensión .log)")
     args = parser.parse_args()
+
+    # Si no se pasa --log-file explícito, derivar del archivo de salida
+    log_file_path = args.log_file or f"{os.path.splitext(args.output)[0]}.log"
+    CONFIG["compilation_error_log"] = log_file_path
+    CONFIG["parsing_error_log"] = log_file_path
+    args.log_file = log_file_path
 
     start_time = time.time()
 
