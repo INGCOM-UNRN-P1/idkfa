@@ -117,7 +117,8 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
             template_info['predefined_options'], 
             dist_exprs,
             variables,
-            count=min_distractors
+            count=min_distractors,
+            template_name=filename
         )
 
         display_code_instance = code_instance

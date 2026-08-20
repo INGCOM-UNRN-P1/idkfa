@@ -168,7 +168,8 @@ def generate_incorrect_answers(
     predefined_options: List[str], 
     distractor_expressions: Union[List[str], List[DistractorDef]], 
     variables: Dict[str, Any], 
-    count: int = 3
+    count: int = 3,
+    template_name: Optional[str] = None
 ) -> List[DistractorOption]:
     """Genera una lista de respuestas incorrectas con feedback específico y filtro de trivialidad."""
     norm_correct = normalize_answer_repr(correct_answer)
@@ -196,9 +197,12 @@ def generate_incorrect_answers(
         temp_expr = expr
         try:
             for var_name, var_value in variables.items():
-                temp_expr = temp_expr.replace(f"__{var_name}__", str(var_value))
+                if isinstance(var_value, (int, float)):
+                    temp_expr = temp_expr.replace(f"__{var_name}__", str(var_value))
             
-            calculated_value = eval(temp_expr)
+            # Evaluar pasando variables como contexto global/local
+            eval_globals = {"__builtins__": __builtins__, "chr": chr, "ord": ord, "int": int, "float": float, "str": str, "bin": bin, "hex": hex}
+            calculated_value = eval(temp_expr, eval_globals, dict(variables))
             calc_str = str(calculated_value).strip()
             norm_calc = normalize_answer_repr(calc_str)
             
@@ -212,7 +216,8 @@ def generate_incorrect_answers(
                         fb_eval = fb_eval.replace(f"__{v_name}__", str(v_val))
                 unique_incorrect.append(DistractorOption(text=calc_str, feedback=fb_eval))
         except Exception as e:
-            print(f"    [!] Advertencia: No se pudo calcular el distractor '{expr}': {e}", file=sys.stderr)
+            origin_info = f" [{template_name}]" if template_name else ""
+            print(f"    [!] Advertencia{origin_info}: No se pudo calcular el distractor '{expr}': {e}", file=sys.stderr)
 
     # 3. Generación aleatoria de offsets numéricos no triviales
     try:
