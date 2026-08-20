@@ -123,13 +123,13 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
                     if line_str and not line_str.startswith('//#'):
                         expr = line_str
                         dist_fb: Optional[str] = None
-                        # Soporte para formato: expresion -> feedback o expresion // feedback
-                        if '->' in expr:
-                            parts = expr.split('->', 1)
+                        # Soporte para formato de feedback: expresion -> feedback o expresion // feedback
+                        if ' -> ' in expr:
+                            parts = expr.split(' -> ', 1)
                             expr = parts[0].strip()
                             dist_fb = parts[1].strip()
-                        elif '//' in expr and not expr.startswith('//'):
-                            parts = expr.split('//', 1)
+                        elif ' // ' in expr and not expr.startswith('//') and not (expr.startswith('f"') or expr.startswith("f'")):
+                            parts = expr.split(' // ', 1)
                             expr = parts[0].strip()
                             dist_fb = parts[1].strip()
 
