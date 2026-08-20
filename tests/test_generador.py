@@ -1040,9 +1040,32 @@ Math Sqrt Test
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["output"], "4")
 
+    def test_centralized_app_config(self):
+        """Test centralized AppConfig loading and serialization."""
+        from idkfa.config import AppConfig
+        cfg = AppConfig(compiler="clang", min_distractors=4)
+        self.assertEqual(cfg.compiler, "clang")
+        self.assertEqual(cfg.min_distractors, 4)
+        d = cfg.to_dict()
+        self.assertEqual(d["compiler"], "clang")
+
+        # Test loading from temporary JSON config file
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write('{"compiler": "clang", "min_distractors": 6}')
+            temp_cfg_path = f.name
+
+        try:
+            loaded_cfg = AppConfig.load_from_file(temp_cfg_path)
+            self.assertEqual(loaded_cfg.compiler, "clang")
+            self.assertEqual(loaded_cfg.min_distractors, 6)
+        finally:
+            if os.path.exists(temp_cfg_path):
+                os.remove(temp_cfg_path)
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 
