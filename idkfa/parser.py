@@ -2,7 +2,12 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
+
+@dataclass
+class DistractorDef:
+    expression: str
+    feedback: Optional[str] = None
 
 @dataclass
 class TemplateInfo:
@@ -12,6 +17,7 @@ class TemplateInfo:
     var_defs: Dict[str, str] = field(default_factory=dict)
     predefined_options: List[str] = field(default_factory=list)
     distractor_expressions: List[str] = field(default_factory=list)
+    distractor_defs: List[DistractorDef] = field(default_factory=list)
     name: str = "Pregunta de Código C (sin nombre)"
     fixed_correct_answer: Optional[str] = None
     correct_answer_expression: Optional[str] = None
@@ -31,6 +37,7 @@ class TemplateInfo:
             "var_defs": self.var_defs,
             "predefined_options": self.predefined_options,
             "distractor_expressions": self.distractor_expressions,
+            "distractor_defs": self.distractor_defs,
             "name": self.name,
             "fixed_correct_answer": self.fixed_correct_answer,
             "correct_answer_expression": self.correct_answer_expression,
@@ -103,9 +110,10 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
         name_match = re.search(r"/\*name\s*(.*?)\*/", content, re.DOTALL)
         question_name = name_match.group(1).strip() if name_match else "Pregunta de Código C (sin nombre)"
 
-        # --- Distractors ---
+        # --- Distractors con soporte para feedback específico ---
         distractors_match = re.search(r"/\*distractors\s*(.*?)\*/", content, re.DOTALL)
         distractor_expressions: List[str] = []
+        distractor_defs: List[DistractorDef] = []
         if distractors_match:
             distractor_content = distractors_match.group(1).strip()
             if distractor_content:
@@ -113,10 +121,24 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
                 for line in lines_dist:
                     line_str = line.strip()
                     if line_str and not line_str.startswith('//#'):
-                        if line_str.startswith('#'):
-                            distractor_expressions.append(line_str[1:].strip())
-                        elif line_str:
-                            distractor_expressions.append(line_str)
+                        expr = line_str
+                        dist_fb: Optional[str] = None
+                        # Soporte para formato: expresion -> feedback o expresion // feedback
+                        if '->' in expr:
+                            parts = expr.split('->', 1)
+                            expr = parts[0].strip()
+                            dist_fb = parts[1].strip()
+                        elif '//' in expr and not expr.startswith('//'):
+                            parts = expr.split('//', 1)
+                            expr = parts[0].strip()
+                            dist_fb = parts[1].strip()
+
+                        if expr.startswith('#'):
+                            expr = expr[1:].strip()
+                        
+                        if expr:
+                            distractor_expressions.append(expr)
+                            distractor_defs.append(DistractorDef(expression=expr, feedback=dist_fb))
 
         # --- Correcta ---
         correcta_match = re.search(r"/\*correcta\s*(.*?)\*/", content, re.DOTALL)
@@ -190,6 +212,7 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
             var_defs=var_defs,
             predefined_options=predefined_options,
             distractor_expressions=distractor_expressions,
+            distractor_defs=distractor_defs,
             name=question_name,
             fixed_correct_answer=fixed_correct_answer,
             correct_answer_expression=correct_answer_expression,

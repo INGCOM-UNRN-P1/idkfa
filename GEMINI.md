@@ -27,12 +27,16 @@ python3 generador.py [options]
 *   `--min-distractors`: Minimum number of distractors for multichoice questions. Defaults to `3`.
 *   `--compiler`: C compiler binary to use (e.g. `gcc`, `clang`). Defaults to `gcc`.
 *   `--cflags`: Global C compilation flags (e.g. `"-Wall -Wextra -O2"`). Defaults to `"-Wall -Wextra"`.
+*   `-j` or `--jobs`: Number of parallel worker processes for compilation and generation. Defaults to `1`.
+*   `--check` or `--dry-run`: Fast syntax and compilation verification mode without writing XML.
+*   `--config`: Path to custom JSON configuration file.
 
 ## Example
 
 ```bash
-python3 generador.py -s templates -o my_moodle_questions.xml -n 10 -c my_course_category
+python3 generador.py -s templates -o my_moodle_questions.xml -n 10 -c my_course_category -j 4
 python3 generador.py -t templates/arrays/example.c -n 5  # Process single template
+python3 generador.py -s templates --check  # Quick dry-run validation
 python3 generador.py -g -n 3  # Generate C code only for verification
 ```
 
@@ -44,6 +48,7 @@ python3 generador.py -g -n 3  # Generate C code only for verification
 *   Each `.c` file combines valid C code with special metadata blocks embedded in comments.
 *   Question statements are defined using single-line comments (`//`) at the beginning and end of the relevant code block.
 *   Dynamic variables within the C code are denoted by `__variable_name__`.
+*   Statements support grammar adaptation tags: `[plural: var_name | singular | plural]` and `[gender: var_name | masculino | femenino]`.
 *   Macros (e.g., `#define __val_a__ 10`) can be included in the C files for independent testing; the script will remove them during processing.
 
 ## Metadata Blocks (within C templates)
@@ -58,7 +63,7 @@ Metadata is defined within `/* section ... */` comment blocks:
 *   `/*feedback*/`: (Optional) Dynamic pedagogical feedback displayed after question completion. Supports dynamic variables (`__var__` or `{var * 2}`).
 *   `/*var*/`: (Optional) Defines dynamic variables using Python expressions (e.g., `variable_name: range(min, max)`). Supports dependent variables referencing previous variables (`b: range(__a__ + 1, 10)`).
 *   `/*opciones*/`: (Optional) Provides a list of fixed incorrect answer options.
-*   `/*distractors*/`: (Optional) Defines "smart distractors" using Python expressions that generate plausible incorrect answers based on dynamic variables. Lines starting with `//#` are comments. Lines starting with `# ` (hash followed by space) are treated as evaluable Python expressions.
+*   `/*distractors*/`: (Optional) Defines "smart distractors" using Python expressions. Supports specific distractor feedback using syntax `expr -> feedback` or `expr // feedback`. Lines starting with `//#` are comments. Trivial distractors (negative values for positive counts, NaN) are filtered automatically.
 *   `/*correcta*/`: (Optional) If present, its content is used as the correct answer directly, bypassing code compilation and execution. Can be a fixed text value or an evaluable Python expression (if the first line starts with `# `). Useful for conceptual questions or conditional answers.
 *   `/*STDIN*/`: (Optional) Defines standard input (stdin) to be provided to the program during execution. Supports static text, dynamic variables using `__variable_name__` format, and f-string-like expressions using `{variable}` syntax. Each line in the block becomes a line of stdin. The stdin content is automatically displayed in the question statement. Useful for programs using `scanf`, `fgets`, etc.
 

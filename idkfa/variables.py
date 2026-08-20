@@ -1,10 +1,24 @@
-"""Módulo para la generación y muestreo determinista de variables y distractores."""
+"""Módulo para la generación, filtrado y adaptación gramatical de variables y distractores."""
 
 import re
 import sys
 import random
 import itertools
-from typing import Dict, List, Any, Optional, Set, Union
+from dataclasses import dataclass
+from typing import Dict, List, Any, Optional, Set, Union, Tuple
+from idkfa.parser import DistractorDef
+
+class DistractorOption(str):
+    feedback: str
+
+    def __new__(cls, text: Any, feedback: str = "") -> "DistractorOption":
+        obj = super().__new__(cls, str(text))
+        obj.feedback = feedback
+        return obj
+
+    @property
+    def text(self) -> str:
+        return str(self)
 
 def generate_vars(var_defs: Dict[str, str]) -> Dict[str, Any]:
     """Genera un conjunto de valores concretos a partir de las definiciones de variables, soportando dependencias."""
@@ -94,29 +108,91 @@ def normalize_answer_repr(ans: Any) -> str:
     except (ValueError, TypeError):
         return ans_str
 
+def adapt_grammar_and_pluralization(text: str, variables: Dict[str, Any]) -> str:
+    """
+    Adapta pluralizaciones y concordancia gramatical según los valores de las variables.
+    Sintaxis:
+      [plural:var_name|singular|plural]
+      [gender:var_name|masculino|femenino]
+    """
+    def replace_plural(match: re.Match) -> str:
+        var_name = match.group(1).strip()
+        sing = match.group(2).strip()
+        plur = match.group(3).strip()
+        val = variables.get(var_name, 0)
+        try:
+            num = float(val)
+            return sing if abs(num) == 1 else plur
+        except (ValueError, TypeError):
+            return plur
+
+    def replace_gender(match: re.Match) -> str:
+        var_name = match.group(1).strip()
+        masc = match.group(2).strip()
+        fem = match.group(3).strip()
+        val = str(variables.get(var_name, "")).strip().lower()
+        if val in ["f", "fem", "femenino", "mujer", "female", "a"]:
+            return fem
+        return masc
+
+    out = re.sub(r'\[plural:\s*([a-zA-Z0-9_]+)\s*\|\s*([^|]*)\s*\|\s*([^\]]*)\]', replace_plural, text)
+    out = re.sub(r'\[gender:\s*([a-zA-Z0-9_]+)\s*\|\s*([^|]*)\s*\|\s*([^\]]*)\]', replace_gender, out)
+    return out
+
+def is_mathematically_trivial(candidate_str: str, correct_answer: Any) -> bool:
+    """
+    Detecta y filtra distractores triviales o absurdos:
+    - Negativos cuando la respuesta correcta es un número positivo no nulo (ej: tamaño, índice, puntero)
+    - Distractores idénticos a NaN, inf, o saltos desproporcionados (> 1000x)
+    """
+    cand = str(candidate_str).strip()
+    if cand.lower() in ["nan", "inf", "-inf", "null", "none"]:
+        return True
+    try:
+        cand_num = float(cand)
+        corr_num = float(str(correct_answer).strip())
+        
+        # Si la respuesta correcta es positiva (e.g. longitud de array, salida de conteo >= 0) y el distractor es negativo
+        if corr_num >= 0 and cand_num < 0:
+            return True
+        
+        # Saltos absurdos
+        if corr_num > 0 and cand_num > corr_num * 1000:
+            return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
 def generate_incorrect_answers(
     correct_answer: Any, 
     predefined_options: List[str], 
-    distractor_expressions: List[str], 
+    distractor_expressions: Union[List[str], List[DistractorDef]], 
     variables: Dict[str, Any], 
     count: int = 3
-) -> List[str]:
-    """Genera una lista de respuestas incorrectas, normalizando opciones y evitando duplicados."""
+) -> List[DistractorOption]:
+    """Genera una lista de respuestas incorrectas con feedback específico y filtro de trivialidad."""
     norm_correct = normalize_answer_repr(correct_answer)
     seen_normalized: Set[str] = {norm_correct}
     
-    unique_incorrect: List[str] = []
+    unique_incorrect: List[DistractorOption] = []
 
     # 1. Opciones predefinidas
     for opt in predefined_options:
         opt_str = str(opt).strip()
         norm_opt = normalize_answer_repr(opt_str)
-        if norm_opt and norm_opt not in seen_normalized:
+        if norm_opt and norm_opt not in seen_normalized and not is_mathematically_trivial(opt_str, correct_answer):
             seen_normalized.add(norm_opt)
-            unique_incorrect.append(opt_str)
+            unique_incorrect.append(DistractorOption(text=opt_str, feedback=""))
 
     # 2. Expresiones de distractores
-    for expr in distractor_expressions:
+    for d in distractor_expressions:
+        if isinstance(d, DistractorDef):
+            expr = d.expression
+            fb_template = d.feedback or ""
+        else:
+            expr = str(d)
+            fb_template = ""
+
         temp_expr = expr
         try:
             for var_name, var_value in variables.items():
@@ -125,24 +201,31 @@ def generate_incorrect_answers(
             calculated_value = eval(temp_expr)
             calc_str = str(calculated_value).strip()
             norm_calc = normalize_answer_repr(calc_str)
-            if norm_calc and norm_calc not in seen_normalized:
+            
+            if norm_calc and norm_calc not in seen_normalized and not is_mathematically_trivial(calc_str, correct_answer):
                 seen_normalized.add(norm_calc)
-                unique_incorrect.append(calc_str)
+                
+                # Evaluar feedback específico
+                fb_eval = fb_template
+                if fb_eval:
+                    for v_name, v_val in variables.items():
+                        fb_eval = fb_eval.replace(f"__{v_name}__", str(v_val))
+                unique_incorrect.append(DistractorOption(text=calc_str, feedback=fb_eval))
         except Exception as e:
             print(f"    [!] Advertencia: No se pudo calcular el distractor '{expr}': {e}", file=sys.stderr)
 
-    # 3. Generación aleatoria de offsets numéricos si es posible
+    # 3. Generación aleatoria de offsets numéricos no triviales
     try:
         num_correct = int(float(str(correct_answer).strip()))
         attempts = 0
-        target_count = max(len(predefined_options) + len(distractor_expressions) + count, count)
-        while len(unique_incorrect) < target_count and attempts < 100:
+        while len(unique_incorrect) < count and attempts < 100:
             offset = random.randint(1, 10) * random.choice([-1, 1])
-            new_incorrect = str(num_correct + offset)
+            new_val = num_correct + offset
+            new_incorrect = str(new_val)
             norm_new = normalize_answer_repr(new_incorrect)
-            if norm_new not in seen_normalized:
+            if norm_new not in seen_normalized and not is_mathematically_trivial(new_incorrect, correct_answer):
                 seen_normalized.add(norm_new)
-                unique_incorrect.append(new_incorrect)
+                unique_incorrect.append(DistractorOption(text=new_incorrect, feedback=""))
             attempts += 1
     except (ValueError, TypeError):
         pass
@@ -168,7 +251,6 @@ def generate_stdin(stdin_template: Optional[str], variables: Dict[str, Any]) -> 
             except Exception:
                 return match.group(0)
 
-        # Evaluar cualquier expresión entre {expr}
         stdin_content = re.sub(r'\{([^}]+)\}', replace_expr, stdin_content)
         return stdin_content
     except Exception as e:

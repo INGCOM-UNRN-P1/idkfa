@@ -1115,9 +1115,60 @@ Math Sqrt Test
         self.assertIsNotNone(cat_q.find("info"))
         self.assertIsNotNone(cat_q.find("idnumber"))
 
+    def test_distractor_specific_feedback(self):
+        """Test parsing and XML output of specific distractor feedback."""
+        template = """// Question
+int main() { printf("10"); return 0; }
+// Answer
+
+/*name
+Distractor Feedback Test
+*/
+
+/*distractors
+9 -> Error de off-by-one
+# 11 // Sumaste uno de mas
+*/
+"""
+        parsed = generador.parse_c_template(template)
+        self.assertEqual(len(parsed["distractor_defs"]), 2)
+        self.assertEqual(parsed["distractor_defs"][0].feedback, "Error de off-by-one")
+        self.assertEqual(parsed["distractor_defs"][1].feedback, "Sumaste uno de mas")
+
+        opts = generador.generate_incorrect_answers("10", [], parsed["distractor_defs"], {}, count=2)
+        self.assertGreaterEqual(len(opts), 2)
+        opt_texts = [o.text for o in opts]
+        self.assertIn("9", opt_texts)
+        self.assertIn("11", opt_texts)
+
+        root = ET.Element("quiz")
+        generador.create_moodle_question_xml(root, parsed, "code", "10", opts, 1)
+        q_node = root.find("question")
+        fb_nodes = q_node.findall("answer/feedback/text")
+        fb_texts = [n.text for n in fb_nodes]
+        self.assertIn("<![CDATA[Error de off-by-one]]>", fb_texts)
+
+    def test_trivial_distractor_filtering(self):
+        """Test that negative distractors for positive answers and absurd jumps are filtered."""
+        self.assertTrue(generador.is_mathematically_trivial("-5", "10"))
+        self.assertTrue(generador.is_mathematically_trivial("NaN", "10"))
+        self.assertTrue(generador.is_mathematically_trivial("50000", "5"))
+        self.assertFalse(generador.is_mathematically_trivial("4", "5"))
+
+    def test_grammar_and_pluralization_adaptation(self):
+        """Test pluralization and gender adaptation in statements."""
+        tmpl_plural = "Se ingresa [plural: n | 1 elemento | {n} elementos]."
+        self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_plural, {"n": 1}), "Se ingresa 1 elemento.")
+        self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_plural, {"n": 3}), "Se ingresa {n} elementos.")
+
+        tmpl_gender = "El usuario está [gender: gen | registrado | registrada]."
+        self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_gender, {"gen": "f"}), "El usuario está registrada.")
+        self.assertEqual(generador.adapt_grammar_and_pluralization(tmpl_gender, {"gen": "m"}), "El usuario está registrado.")
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

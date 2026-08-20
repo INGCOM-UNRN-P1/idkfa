@@ -8,7 +8,10 @@ from idkfa.variables import (
     generate_all_variants_deterministically,
     normalize_answer_repr,
     generate_incorrect_answers,
-    generate_stdin
+    generate_stdin,
+    is_mathematically_trivial,
+    adapt_grammar_and_pluralization,
+    DistractorOption
 )
 from idkfa.moodle_xml import (
     CDATA,
@@ -29,6 +32,9 @@ __all__ = [
     "normalize_answer_repr",
     "generate_incorrect_answers",
     "generate_stdin",
+    "is_mathematically_trivial",
+    "adapt_grammar_and_pluralization",
+    "DistractorOption",
     "CDATA",
     "evaluate_feedback",
     "create_moodle_question_xml",

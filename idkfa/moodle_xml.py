@@ -3,9 +3,9 @@
 import re
 import sys
 from xml.etree.ElementTree import SubElement, Element
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from idkfa.config import CONFIG
-from idkfa.variables import normalize_answer_repr
+from idkfa.variables import normalize_answer_repr, DistractorOption, adapt_grammar_and_pluralization
 
 def CDATA(text: Any) -> str:
     """Envuelve el texto para la conversión a CDATA."""
@@ -31,6 +31,7 @@ def evaluate_feedback(feedback_template: Optional[str], variables: Dict[str, Any
                 return match.group(0)
 
         fb_content = re.sub(r'\{([^}]+)\}', replace_expr, fb_content)
+        fb_content = adapt_grammar_and_pluralization(fb_content, variables)
         return fb_content
     except Exception as e:
         print(f"  [!] Error evaluando feedback: {e}", file=sys.stderr)
@@ -41,7 +42,7 @@ def create_moodle_question_xml(
     template_info: Any, 
     code_instance: str, 
     correct_answer: Any, 
-    incorrect_answers: List[str], 
+    incorrect_answers: Union[List[str], List[DistractorOption]], 
     question_number: int, 
     stdin_content: Optional[str] = None, 
     variables: Optional[Dict[str, Any]] = None, 
@@ -59,6 +60,10 @@ def create_moodle_question_xml(
     q_template: str = template_info.get("question_text_template", "") if hasattr(template_info, "get") else getattr(template_info, "question_text_template", "")
     question_text_with_code = q_template.replace("{code}", code_instance)
     
+    # Aplicar pluralización y adaptación gramatical en enunciado
+    if variables:
+        question_text_with_code = adapt_grammar_and_pluralization(question_text_with_code, variables)
+
     if stdin_content:
         stdin_section = f"\n\n#### Entrada (stdin):\n```\n{stdin_content}\n```"
         question_text_with_code += stdin_section
@@ -98,11 +103,18 @@ def create_moodle_question_xml(
         SubElement(ans_correct, "text").text = CDATA(f"`{correct_answer}`")
         SubElement(SubElement(ans_correct, "feedback", format="markdown"), "text").text = CDATA("")
 
-        for ans_text in incorrect_answers:
+        for opt in incorrect_answers:
+            if isinstance(opt, DistractorOption):
+                ans_text = opt.text
+                ans_fb = opt.feedback
+            else:
+                ans_text = str(opt)
+                ans_fb = ""
+
             ans_incorrect = SubElement(q_node, "answer", fraction="0", format="markdown")
             formatted_ans_text = f"`{ans_text}`" if str(ans_text).isnumeric() or (str(ans_text).startswith('-') and str(ans_text)[1:].isnumeric()) else str(ans_text)
             SubElement(ans_incorrect, "text").text = CDATA(formatted_ans_text)
-            SubElement(SubElement(ans_incorrect, "feedback", format="markdown"), "text").text = CDATA("")
+            SubElement(SubElement(ans_incorrect, "feedback", format="markdown"), "text").text = CDATA(ans_fb)
 
     elif question_type == "shortanswer":
         SubElement(q_node, "usecase").text = "0"
