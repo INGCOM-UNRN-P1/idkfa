@@ -99,7 +99,7 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
             result = compile_and_run_c(
                 code_instance, 
                 config_dict.get("execution_timeout", 3), 
-                template_name=filename, 
+                template_name=filepath, 
                 stdin_input=stdin_input,
                 extra_flags=template_info.get("custom_flags"),
                 custom_compiler=custom_compiler,
@@ -118,7 +118,7 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
             dist_exprs,
             variables,
             count=min_distractors,
-            template_name=filename
+            template_name=filepath
         )
 
         display_code_instance = code_instance
@@ -341,7 +341,7 @@ def main() -> None:
     for res in results:
         if res["status"] == "error":
             failed_templates += 1
-            print(f"  [!] No se pudo procesar {res['filename']}. Razón: {res['reason']}", file=sys.stderr)
+            print(f"\n  [!] No se pudo procesar '{res['filepath']}'. Razón: {res['reason']}", file=sys.stderr)
         else:
             successful_templates += 1
             questions = res["questions"]

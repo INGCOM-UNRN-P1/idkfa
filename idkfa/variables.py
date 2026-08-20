@@ -217,7 +217,8 @@ def generate_incorrect_answers(
                 unique_incorrect.append(DistractorOption(text=calc_str, feedback=fb_eval))
         except Exception as e:
             origin_info = f" [{template_name}]" if template_name else ""
-            print(f"    [!] Advertencia{origin_info}: No se pudo calcular el distractor '{expr}': {e}", file=sys.stderr)
+            sys.stderr.write(f"\n    [!] Advertencia{origin_info}: No se pudo calcular el distractor '{expr}': {e}\n")
+            sys.stderr.flush()
 
     # 3. Generación aleatoria de offsets numéricos no triviales
     try:
