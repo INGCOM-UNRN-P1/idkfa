@@ -1049,7 +1049,6 @@ Math Sqrt Test
         d = cfg.to_dict()
         self.assertEqual(d["compiler"], "clang")
 
-        # Test loading from temporary JSON config file
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write('{"compiler": "clang", "min_distractors": 6}')
             temp_cfg_path = f.name
@@ -1062,9 +1061,64 @@ Math Sqrt Test
             if os.path.exists(temp_cfg_path):
                 os.remove(temp_cfg_path)
 
+    def test_compiler_timeout_handling(self):
+        """Test that infinite loops in C trigger timeout status."""
+        infinite_code = """
+        #include <stdio.h>
+        int main() {
+            while (1) {}
+            return 0;
+        }
+        """
+        res = generador.compile_and_run_c(infinite_code, timeout=1)
+        self.assertEqual(res["status"], "timeout")
+        self.assertIn("tiempo límite", res["output"])
+
+    def test_compiler_runtime_crash_handling(self):
+        """Test that segfaults or runtime aborts are captured as runtime_error."""
+        crash_code = """
+        #include <stdlib.h>
+        int main() {
+            abort();
+            return 0;
+        }
+        """
+        res = generador.compile_and_run_c(crash_code, timeout=3)
+        self.assertEqual(res["status"], "runtime_error")
+
+    def test_distractors_with_non_numeric_answers(self):
+        """Test distractor generation when correct answer is text/string."""
+        correct = "CADENA_DE_TEXTO"
+        predefined = ["OPCION_1", "OPCION_2"]
+        results = generador.generate_incorrect_answers(correct, predefined, [], {}, count=3)
+        self.assertNotIn("CADENA_DE_TEXTO", results)
+        self.assertIn("OPCION_1", results)
+        self.assertIn("OPCION_2", results)
+
+    def test_stdin_fstring_evaluation_with_variables(self):
+        """Test STDIN generation evaluates expressions inside curly braces."""
+        stdin_template = "__val_a__\n{val_a * 10}\n{val_b.upper()}"
+        vars_dict = {"val_a": 5, "val_b": "hola"}
+        out = generador.generate_stdin(stdin_template, vars_dict)
+        lines = out.split('\n')
+        self.assertEqual(lines[0], "5")
+        self.assertEqual(lines[1], "50")
+        self.assertEqual(lines[2], "HOLA")
+
+    def test_category_xml_order_and_content(self):
+        """Test create_category_xml produces required tags in XSD order."""
+        root = ET.Element("quiz")
+        generador.create_category_xml(root, "$course$/top/categoria_test")
+        cat_q = root.find("question[@type='category']")
+        self.assertIsNotNone(cat_q)
+        self.assertEqual(cat_q.find("category/text").text, "$course$/top/categoria_test")
+        self.assertIsNotNone(cat_q.find("info"))
+        self.assertIsNotNone(cat_q.find("idnumber"))
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

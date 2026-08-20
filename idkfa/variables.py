@@ -160,19 +160,17 @@ def generate_stdin(stdin_template: Optional[str], variables: Dict[str, Any]) -> 
         for name, value in variables.items():
             stdin_content = stdin_content.replace(f"__{name}__", str(value))
         
-        result_lines: List[str] = []
-        for line in stdin_content.split('\n'):
-            if '{' in line and '}' in line:
-                try:
-                    eval_context = variables.copy()
-                    processed_line = line.format(**eval_context)
-                    result_lines.append(processed_line)
-                except Exception:
-                    result_lines.append(line)
-            else:
-                result_lines.append(line)
-        
-        return '\n'.join(result_lines)
+        def replace_expr(match: re.Match) -> str:
+            expr_str = match.group(1)
+            try:
+                val = eval(expr_str, {"__builtins__": __builtins__}, variables)
+                return str(val)
+            except Exception:
+                return match.group(0)
+
+        # Evaluar cualquier expresión entre {expr}
+        stdin_content = re.sub(r'\{([^}]+)\}', replace_expr, stdin_content)
+        return stdin_content
     except Exception as e:
         print(f"  [!] Error generando STDIN: {e}", file=sys.stderr)
         return stdin_template
