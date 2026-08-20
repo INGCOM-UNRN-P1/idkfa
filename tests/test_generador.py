@@ -860,7 +860,112 @@ line2
         # Should not have duplicate '1'
         self.assertEqual(norm_results.count("1"), 1)
 
+    def test_min_distractors_count(self):
+        """Test that generate_incorrect_answers meets minimum distractor count."""
+        correct = "10"
+        results = generador.generate_incorrect_answers(correct, [], [], {}, count=5)
+        self.assertGreaterEqual(len(results), 5)
+        self.assertNotIn("10", results)
+
+    def test_parse_and_xml_penalty_and_defaultgrade(self):
+        """Test parsing and XML creation for custom penalty and defaultgrade."""
+        template = """// Question
+int main() { printf("5"); return 0; }
+// Answer
+
+/*name
+Penalty Test
+*/
+
+/*penalty 0.25*/
+/*defaultgrade 2.5*/
+"""
+        parsed = generador.parse_c_template(template)
+        self.assertEqual(parsed["penalty"], "0.25")
+        self.assertEqual(parsed["default_grade"], "2.5")
+
+        root = ET.Element("quiz")
+        generador.create_moodle_question_xml(root, parsed, "code", "5", ["1", "2", "3"], 1)
+        q_node = root.find("question")
+        self.assertEqual(q_node.find("penalty").text, "0.25")
+        self.assertEqual(q_node.find("defaultgrade").text, "2.5")
+
+    def test_question_types_xml(self):
+        """Test XML generation for shortanswer and numerical question types."""
+        # Shortanswer
+        template_sa = """// Question
+int main() { printf("hello"); return 0; }
+// Answer
+
+/*name
+Shortanswer Test
+*/
+
+/*type shortanswer*/
+"""
+        parsed_sa = generador.parse_c_template(template_sa)
+        self.assertEqual(parsed_sa["question_type"], "shortanswer")
+
+        root_sa = ET.Element("quiz")
+        generador.create_moodle_question_xml(root_sa, parsed_sa, "code", "hello", [], 1)
+        q_sa = root_sa.find("question")
+        self.assertEqual(q_sa.get("type"), "shortanswer")
+        self.assertIsNotNone(q_sa.find("usecase"))
+        self.assertEqual(q_sa.find("answer/text").text, "<![CDATA[hello]]>")
+
+        # Numerical
+        template_num = """// Question
+int main() { printf("42"); return 0; }
+// Answer
+
+/*name
+Numerical Test
+*/
+
+/*type numerical*/
+"""
+        parsed_num = generador.parse_c_template(template_num)
+        self.assertEqual(parsed_num["question_type"], "numerical")
+
+        root_num = ET.Element("quiz")
+        generador.create_moodle_question_xml(root_num, parsed_num, "code", "42", [], 1)
+        q_num = root_num.find("question")
+        self.assertEqual(q_num.get("type"), "numerical")
+        self.assertIsNotNone(q_num.find("answer/tolerance"))
+        self.assertEqual(q_num.find("answer/tolerance").text, "0")
+
+    def test_dynamic_feedback_evaluation(self):
+        """Test evaluation and insertion of dynamic feedback."""
+        template_fb = """// Question
+int main() { printf("10"); return 0; }
+// Answer
+
+/*name
+Feedback Test
+*/
+
+/*var
+a: [5]
+b: [10]
+*/
+
+/*feedback
+El valor de a es __a__ y el doble es {a * 2}.
+*/
+"""
+        parsed = generador.parse_c_template(template_fb)
+        self.assertIsNotNone(parsed["feedback_template"])
+        variables = {"a": 5, "b": 10}
+        evaluated = generador.evaluate_feedback(parsed["feedback_template"], variables)
+        self.assertIn("El valor de a es 5 y el doble es 10.", evaluated)
+
+        root = ET.Element("quiz")
+        generador.create_moodle_question_xml(root, parsed, "code", "10", ["1", "2"], 1, variables=variables)
+        q_node = root.find("question")
+        self.assertEqual(q_node.find("generalfeedback/text").text, "<![CDATA[El valor de a es 5 y el doble es 10.]]>")
+
 
 if __name__ == '__main__':
     unittest.main()
+
 

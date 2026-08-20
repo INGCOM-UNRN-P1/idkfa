@@ -19,6 +19,9 @@ CONFIG = {
     "moodle_base_category": "programacion1_gen_codigo",
     "compiler": "gcc",
     "execution_timeout": 3,
+    "min_distractors": 3,
+    "default_grade": "1.0000000",
+    "default_penalty": "0.3333333",
     "compilation_error_log": "compile_errors.log",
     "parsing_error_log": "parsing_errors.log",
     "substitutions": {
@@ -138,6 +141,27 @@ def parse_c_template(content):
                 stdin_lines = [line for line in lines if line.strip() and not line.strip().startswith('//#')]
                 stdin_template = '\n'.join(stdin_lines)
 
+        # --- Lectura de sección penalty (opcional) ---
+        penalty_match = re.search(r"/\*penalty\s*(.*?)\*/", content, re.DOTALL)
+        penalty = penalty_match.group(1).strip() if penalty_match else None
+
+        # --- Lectura de sección defaultgrade (opcional) ---
+        grade_match = re.search(r"/\*defaultgrade\s*(.*?)\*/", content, re.DOTALL)
+        default_grade = grade_match.group(1).strip() if grade_match else None
+
+        # --- Lectura de tipo de pregunta (opcional: multichoice, shortanswer, numerical) ---
+        type_match = re.search(r"/\*type\s*(.*?)\*/", content, re.DOTALL)
+        question_type = type_match.group(1).strip().lower() if type_match else "multichoice"
+        if question_type not in ["multichoice", "shortanswer", "numerical"]:
+            question_type = "multichoice"
+
+        # --- Lectura de sección feedback (opcional) ---
+        feedback_match = re.search(r"/\*feedback\s*(.*?)\*/", content, re.DOTALL)
+        feedback_template = None
+        if feedback_match:
+            fb_lines = [l for l in feedback_match.group(1).strip().split('\n') if not l.strip().startswith('//#')]
+            feedback_template = '\n'.join(fb_lines).strip()
+
         return {
             "status": "success",
             "question_text_template": f"{intro_text}\n```c\n{{code}}\n```\n{outro_text}",
@@ -148,7 +172,11 @@ def parse_c_template(content):
             "name": question_name,
             "fixed_correct_answer": fixed_correct_answer,
             "correct_answer_expression": correct_answer_expression,
-            "stdin_template": stdin_template
+            "stdin_template": stdin_template,
+            "penalty": penalty,
+            "default_grade": default_grade,
+            "question_type": question_type,
+            "feedback_template": feedback_template
         }
     except Exception as e:
         return {"status": "error", "reason": str(e)}
@@ -312,9 +340,34 @@ def generate_incorrect_answers(correct_answer, predefined_options, distractor_ex
     random.shuffle(unique_incorrect)
     return unique_incorrect
 
-def create_moodle_question_xml(parent, template_info, code_instance, correct_answer, incorrect_answers, question_number, stdin_content=None):
+def evaluate_feedback(feedback_template, variables):
+    """Genera el texto de retroalimentación reemplazando variables y expresiones."""
+    if not feedback_template:
+        return ""
+    try:
+        fb_content = feedback_template
+        for name, value in variables.items():
+            fb_content = fb_content.replace(f"__{name}__", str(value))
+        
+        def replace_expr(match):
+            expr_str = match.group(1)
+            try:
+                val = eval(expr_str, {}, variables)
+                return str(val)
+            except Exception:
+                return match.group(0)
+
+        # Evaluar cualquier expresión entre {expr}
+        fb_content = re.sub(r'\{([^}]+)\}', replace_expr, fb_content)
+        return fb_content
+    except Exception as e:
+        print(f"  [!] Error evaluando feedback: {e}", file=sys.stderr)
+        return feedback_template
+
+def create_moodle_question_xml(parent, template_info, code_instance, correct_answer, incorrect_answers, question_number, stdin_content=None, variables=None, args=None):
     """Construye el árbol XML para una pregunta, respetando el orden del XSD."""
-    q_node = SubElement(parent, "question", type="multichoice")
+    question_type = template_info.get("question_type", "multichoice")
+    q_node = SubElement(parent, "question", type=question_type)
     
     # El orden de los siguientes elementos es estricto para cumplir con bank.xsd
     base_name = template_info['name']
@@ -331,28 +384,56 @@ def create_moodle_question_xml(parent, template_info, code_instance, correct_ans
     
     questiontext_node.text = CDATA(question_text_with_code)
 
-    SubElement(SubElement(q_node, "generalfeedback", format="markdown"), "text").text = CDATA("")
-    SubElement(q_node, "defaultgrade").text = "1.0000000"
-    SubElement(q_node, "penalty").text = "0.3333333"
+    # Feedback general dinámico
+    fb_text = ""
+    if template_info.get("feedback_template") and variables:
+        fb_text = evaluate_feedback(template_info["feedback_template"], variables)
+    SubElement(SubElement(q_node, "generalfeedback", format="markdown"), "text").text = CDATA(fb_text)
+
+    # Configuración de defaultgrade y penalty
+    default_grade = template_info.get("default_grade")
+    if not default_grade:
+        default_grade = getattr(args, "defaultgrade", None) or CONFIG.get("default_grade", "1.0000000")
+    SubElement(q_node, "defaultgrade").text = str(default_grade)
+
+    penalty = template_info.get("penalty")
+    if not penalty:
+        penalty = getattr(args, "penalty", None) or CONFIG.get("default_penalty", "0.3333333")
+    SubElement(q_node, "penalty").text = str(penalty)
+
     SubElement(q_node, "hidden").text = "0"
-    SubElement(q_node, "single").text = "true"
-    SubElement(q_node, "shuffleanswers").text = "true"
-    SubElement(q_node, "answernumbering").text = "abc"
-    SubElement(q_node, "showstandardinstruction").text = "0"
-    SubElement(SubElement(q_node, "correctfeedback", format="markdown"), "text").text = CDATA("")
-    SubElement(SubElement(q_node, "partiallycorrectfeedback", format="markdown"), "text").text = CDATA("")
-    SubElement(SubElement(q_node, "incorrectfeedback", format="markdown"), "text").text = CDATA("")
 
-    # Bloque de respuestas
-    ans_correct = SubElement(q_node, "answer", fraction="100", format="markdown")
-    SubElement(ans_correct, "text").text = CDATA(f"`{correct_answer}`")
-    SubElement(SubElement(ans_correct, "feedback", format="markdown"), "text").text = CDATA("")
+    if question_type == "multichoice":
+        SubElement(q_node, "single").text = "true"
+        SubElement(q_node, "shuffleanswers").text = "true"
+        SubElement(q_node, "answernumbering").text = "abc"
+        SubElement(q_node, "showstandardinstruction").text = "0"
+        SubElement(SubElement(q_node, "correctfeedback", format="markdown"), "text").text = CDATA("")
+        SubElement(SubElement(q_node, "partiallycorrectfeedback", format="markdown"), "text").text = CDATA("")
+        SubElement(SubElement(q_node, "incorrectfeedback", format="markdown"), "text").text = CDATA("")
 
-    for ans_text in incorrect_answers:
-        ans_incorrect = SubElement(q_node, "answer", fraction="0", format="markdown")
-        formatted_ans_text = f"`{ans_text}`" if str(ans_text).isnumeric() or (str(ans_text).startswith('-') and str(ans_text)[1:].isnumeric()) else str(ans_text)
-        SubElement(ans_incorrect, "text").text = CDATA(formatted_ans_text)
-        SubElement(SubElement(ans_incorrect, "feedback", format="markdown"), "text").text = CDATA("")
+        # Bloque de respuestas para multichoice
+        ans_correct = SubElement(q_node, "answer", fraction="100", format="markdown")
+        SubElement(ans_correct, "text").text = CDATA(f"`{correct_answer}`")
+        SubElement(SubElement(ans_correct, "feedback", format="markdown"), "text").text = CDATA("")
+
+        for ans_text in incorrect_answers:
+            ans_incorrect = SubElement(q_node, "answer", fraction="0", format="markdown")
+            formatted_ans_text = f"`{ans_text}`" if str(ans_text).isnumeric() or (str(ans_text).startswith('-') and str(ans_text)[1:].isnumeric()) else str(ans_text)
+            SubElement(ans_incorrect, "text").text = CDATA(formatted_ans_text)
+            SubElement(SubElement(ans_incorrect, "feedback", format="markdown"), "text").text = CDATA("")
+
+    elif question_type == "shortanswer":
+        SubElement(q_node, "usecase").text = "0"
+        ans_correct = SubElement(q_node, "answer", fraction="100", format="markdown")
+        SubElement(ans_correct, "text").text = CDATA(str(correct_answer).strip())
+        SubElement(SubElement(ans_correct, "feedback", format="markdown"), "text").text = CDATA("")
+
+    elif question_type == "numerical":
+        ans_correct = SubElement(q_node, "answer", fraction="100", format="markdown")
+        SubElement(ans_correct, "text").text = CDATA(str(correct_answer).strip())
+        SubElement(SubElement(ans_correct, "feedback", format="markdown"), "text").text = CDATA("")
+        SubElement(ans_correct, "tolerance").text = "0"
 
     # El elemento idnumber va al final de la secuencia según el XSD
     SubElement(q_node, "idnumber").text = ""
@@ -437,20 +518,26 @@ def process_single_template(root, filepath, args):
             correct_answer = result['output']
         
         # Generar opciones incorrectas y crear el XML
+        min_distractors = getattr(args, 'min_distractors', None) or CONFIG.get("min_distractors", 3)
         incorrect_answers = generate_incorrect_answers(
             correct_answer, 
             template_info['predefined_options'], 
             template_info['distractor_expressions'],
-            variables
+            variables,
+            count=min_distractors
         )
         
+        # Validar mínimo de distractores para multichoice
+        if template_info.get("question_type", "multichoice") == "multichoice" and len(incorrect_answers) < min_distractors:
+            print(f"    [!] Advertencia: Solo se obtuvieron {len(incorrect_answers)}/{min_distractors} distractores para '{filename}'.", file=sys.stderr)
+
         # Crear una copia del código para visualización con sustituciones
         display_code_instance = code_instance
         substitutions = CONFIG.get("substitutions", {})
         for old, new in substitutions.items():
             display_code_instance = display_code_instance.replace(old, new)
 
-        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input)
+        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input, variables=variables, args=args)
         generated_variants.add(variant_id)
         generated_count += 1
         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
@@ -466,6 +553,9 @@ def main():
     parser.add_argument("-c", "--category", default=CONFIG["moodle_base_category"], help="Categoría base en Moodle")
     parser.add_argument("-g", "--generate-only", action="store_true", help="Solo generar código C en el directorio 'generated' sin crear XML")
     parser.add_argument("-t", "--template", help="Procesar solo este archivo .c específico (ruta completa o relativa)")
+    parser.add_argument("--penalty", default=None, help="Penalización por defecto para respuestas incorrectas (ej: 0.25)")
+    parser.add_argument("--defaultgrade", default=None, help="Calificación por defecto de las preguntas (ej: 1.0)")
+    parser.add_argument("--min-distractors", type=int, default=CONFIG["min_distractors"], help="Mínimo de distractores para preguntas de opción múltiple")
     args = parser.parse_args()
 
     # Si se especifica --generate-only, solo generamos código C
@@ -580,20 +670,26 @@ def main():
                             correct_answer = result['output']
                         
                         # Generar opciones incorrectas y crear el XML
+                        min_distractors = getattr(args, 'min_distractors', None) or CONFIG.get("min_distractors", 3)
                         incorrect_answers = generate_incorrect_answers(
                             correct_answer, 
                             template_info['predefined_options'], 
                             template_info['distractor_expressions'],
-                            variables
+                            variables,
+                            count=min_distractors
                         )
                         
+                        # Validar mínimo de distractores para multichoice
+                        if template_info.get("question_type", "multichoice") == "multichoice" and len(incorrect_answers) < min_distractors:
+                            print(f"    [!] Advertencia: Solo se obtuvieron {len(incorrect_answers)}/{min_distractors} distractores para '{filename}'.", file=sys.stderr)
+
                         # Crear una copia del código para visualización con sustituciones
                         display_code_instance = code_instance
                         substitutions = CONFIG.get("substitutions", {})
                         for old, new in substitutions.items():
                             display_code_instance = display_code_instance.replace(old, new)
 
-                        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input)
+                        create_moodle_question_xml(root, template_info, display_code_instance, correct_answer, incorrect_answers, generated_count + 1, stdin_content=stdin_input, variables=variables, args=args)
                         generated_variants.add(variant_id)
                         generated_count += 1
                         print(f"    -> Generada pregunta #{generated_count} (Respuesta: '{correct_answer}')")
