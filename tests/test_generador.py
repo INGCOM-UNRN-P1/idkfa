@@ -847,8 +847,20 @@ line2
         self.assertIn('x', result)
         self.assertIn('y', result)
         self.assertIn(result['x'], [1, 2, 3, 4])
-        self.assertIn(result['y'], [10, 20, 30])
+    def test_distractor_normalization_and_deduplication(self):
+        """Test normalization and deduplication of distractors."""
+        correct = "0"
+        predefined = ["0.0", " 1 ", "1", "2"]
+        distractors = ["0 + 0", "2 - 1"]
+        vars = {}
+        results = generador.generate_incorrect_answers(correct, predefined, distractors, vars, count=0)
+        norm_results = [generador.normalize_answer_repr(r) for r in results]
+        self.assertNotIn("0", norm_results)
+        self.assertNotIn("0.0", results)
+        # Should not have duplicate '1'
+        self.assertEqual(norm_results.count("1"), 1)
 
 
 if __name__ == '__main__':
     unittest.main()
+

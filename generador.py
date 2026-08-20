@@ -248,10 +248,36 @@ def compile_and_run_c(code, timeout, template_name=None, stdin_input=None):
         if os.path.exists(executable_file):
             os.remove(executable_file)
 
-def generate_incorrect_answers(correct_answer, predefined_options, distractor_expressions, variables, count=3):
-    """Genera una lista de respuestas incorrectas, incluyendo distractores calculados."""
-    incorrect = set(predefined_options)
+def normalize_answer_repr(ans):
+    """Normaliza la representación de una respuesta para comparación."""
+    if ans is None:
+        return ""
+    ans_str = str(ans).strip()
+    # Intentar normalización numérica (ej: 0.0 == 0 o "0" == 0)
+    try:
+        f_val = float(ans_str)
+        if f_val.is_integer():
+            return str(int(f_val))
+        return f"{f_val:g}"
+    except (ValueError, TypeError):
+        return ans_str
 
+def generate_incorrect_answers(correct_answer, predefined_options, distractor_expressions, variables, count=3):
+    """Genera una lista de respuestas incorrectas, normalizando opciones y evitando duplicados."""
+    norm_correct = normalize_answer_repr(correct_answer)
+    seen_normalized = {norm_correct}
+    
+    unique_incorrect = []
+
+    # 1. Opciones predefinidas
+    for opt in predefined_options:
+        opt_str = str(opt).strip()
+        norm_opt = normalize_answer_repr(opt_str)
+        if norm_opt and norm_opt not in seen_normalized:
+            seen_normalized.add(norm_opt)
+            unique_incorrect.append(opt_str)
+
+    # 2. Expresiones de distractores
     for expr in distractor_expressions:
         temp_expr = expr
         try:
@@ -259,29 +285,32 @@ def generate_incorrect_answers(correct_answer, predefined_options, distractor_ex
                 temp_expr = temp_expr.replace(f"__{var_name}__", str(var_value))
             
             calculated_value = eval(temp_expr)
-            incorrect.add(str(calculated_value))
+            calc_str = str(calculated_value).strip()
+            norm_calc = normalize_answer_repr(calc_str)
+            if norm_calc and norm_calc not in seen_normalized:
+                seen_normalized.add(norm_calc)
+                unique_incorrect.append(calc_str)
         except Exception as e:
             print(f"    [!] Advertencia: No se pudo calcular el distractor '{expr}': {e}", file=sys.stderr)
 
+    # 3. Generación aleatoria de offsets numéricos si es posible
     try:
-        num_correct = int(correct_answer)
+        num_correct = int(float(str(correct_answer).strip()))
         attempts = 0
-        while len(incorrect) < len(predefined_options) + len(distractor_expressions) + count and attempts < 50:
+        target_count = max(len(predefined_options) + len(distractor_expressions) + count, count)
+        while len(unique_incorrect) < target_count and attempts < 100:
             offset = random.randint(1, 10) * random.choice([-1, 1])
-            new_incorrect = num_correct + offset
-            if new_incorrect != num_correct:
-                incorrect.add(str(new_incorrect))
+            new_incorrect = str(num_correct + offset)
+            norm_new = normalize_answer_repr(new_incorrect)
+            if norm_new not in seen_normalized:
+                seen_normalized.add(norm_new)
+                unique_incorrect.append(new_incorrect)
             attempts += 1
     except (ValueError, TypeError):
         pass
 
-    if str(correct_answer) in incorrect:
-        incorrect.remove(str(correct_answer))
-        
-    final_incorrect = list(incorrect)
-    random.shuffle(final_incorrect)
-    
-    return final_incorrect
+    random.shuffle(unique_incorrect)
+    return unique_incorrect
 
 def create_moodle_question_xml(parent, template_info, code_instance, correct_answer, incorrect_answers, question_number, stdin_content=None):
     """Construye el árbol XML para una pregunta, respetando el orden del XSD."""
