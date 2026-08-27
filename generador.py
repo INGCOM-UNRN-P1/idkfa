@@ -251,160 +251,23 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
     print(f"   📝 Makefile creado: {makefile_path}")
     print(f"   🔨 Para compilar: cd {generated_dir} && make")
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generador de Cuestionarios Moodle XML (validado por XSD) desde plantillas C.")
-    parser.add_argument("-s", "--source", default=CONFIG["source_directory"], help="Directorio con las plantillas .c o archivo .c individual")
-    parser.add_argument("-o", "--output", default=CONFIG["output_file"], help="Archivo XML de salida")
-    parser.add_argument("-n", "--num", type=int, default=CONFIG["questions_per_template"], help="Número de preguntas a generar por plantilla")
-    parser.add_argument("-c", "--category", default=CONFIG["moodle_base_category"], help="Categoría base en Moodle")
-    parser.add_argument("-g", "--generate-only", action="store_true", help="Solo generar código C en el directorio 'generated' sin crear XML")
-    parser.add_argument("-t", "--template", help="Procesar solo este archivo .c específico (ruta completa o relativa)")
-    parser.add_argument("--penalty", default=None, help="Penalización por defecto para respuestas incorrectas (ej: 0.25)")
-    parser.add_argument("--defaultgrade", default=None, help="Calificación por defecto de las preguntas (ej: 1.0)")
-    parser.add_argument("--min-distractors", type=int, default=CONFIG["min_distractors"], help="Mínimo de distractores para preguntas de opción múltiple")
-    parser.add_argument("--compiler", default=None, help="Compilador C a utilizar (por defecto: gcc)")
-    parser.add_argument("--cflags", default=None, help="Flags de compilación C adicionales o globales (ej: '-Wall -Wextra -O2')")
-    parser.add_argument("--config", default=None, help="Ruta a archivo de configuración JSON personalizada")
-    parser.add_argument("--jobs", "-j", type=int, default=1, help="Número de procesos concurrentes para compilación y generación (default: 1)")
-    parser.add_argument("--check", "--dry-run", dest="dry_run", action="store_true", help="Modo validación rápida: verifica sintaxis y compilación sin generar XML")
-    parser.add_argument("--log-file", default=None, help="Ruta al archivo de log (por defecto: mismo nombre que el archivo de salida con extensión .log)")
-    args = parser.parse_args()
+def main(args: list[str] | None = None) -> None:
+    import typer
+    from idkfa.cli import app
+    from typer._click.exceptions import Exit as ClickExit
+    try:
+        app(args=args, standalone_mode=False)
+    except (SystemExit, ClickExit, typer.Exit) as e:
+        code = getattr(e, "code", getattr(e, "exit_code", 0))
+        if code != 0:
+            sys.exit(code)
 
-    # Si no se pasa --log-file explícito, derivar del archivo de salida
-    log_file_path = args.log_file or f"{os.path.splitext(args.output)[0]}.log"
-    CONFIG["compilation_error_log"] = log_file_path
-    CONFIG["parsing_error_log"] = log_file_path
-    args.log_file = log_file_path
 
-    start_time = time.time()
 
-    if args.config:
-        cfg = AppConfig.load_from_file(args.config)
-        CONFIG.update(cfg.to_dict())
 
-    if args.generate_only:
-        generate_c_code_only(args)
-        return
-
-    # Recolectar archivos a procesar
-    files_to_process: List[Tuple[str, str]] = []
-    if args.template:
-        if not os.path.isfile(args.template) or not args.template.endswith('.c'):
-            print(f"Error: El archivo '{args.template}' no es un archivo .c válido.", file=sys.stderr)
-            sys.exit(1)
-        files_to_process.append((args.template, os.path.dirname(args.template) or "."))
-    else:
-        if not os.path.isdir(args.source):
-            print(f"Error: El directorio '{args.source}' no existe.", file=sys.stderr)
-            sys.exit(1)
-        for dirpath, _, filenames in os.walk(args.source):
-            for filename in sorted(filenames):
-                if filename.endswith(".c"):
-                    files_to_process.append((os.path.join(dirpath, filename), dirpath))
-
-    if not files_to_process:
-        print("\n[!] No se encontraron archivos .c para procesar.")
-        return
-
-    print(f"🚀 Procesando {len(files_to_process)} plantilla(s) con {args.jobs} worker(s)...")
-    if args.dry_run:
-        print("🔍 MODO VALIDACIÓN / DRY-RUN ACTIVO (no se escribirá archivo XML).")
-
-    args_dict = vars(args)
-    results: List[Dict[str, Any]] = []
-
-    # Ejecución secuencial o paralela
-    if args.jobs > 1 and len(files_to_process) > 1:
-        with ProcessPoolExecutor(max_workers=args.jobs) as executor:
-            future_to_file = {
-                executor.submit(process_template_data, fpath, args_dict, CONFIG): fpath 
-                for fpath, _ in files_to_process
-            }
-            for i, future in enumerate(as_completed(future_to_file), 1):
-                res = future.result()
-                results.append(res)
-                print_progress_bar(i, len(files_to_process), prefix='Progreso:', suffix=f'({i}/{len(files_to_process)})')
-    else:
-        for i, (fpath, _) in enumerate(files_to_process, 1):
-            res = process_template_data(fpath, args_dict, CONFIG)
-            results.append(res)
-            print_progress_bar(i, len(files_to_process), prefix='Progreso:', suffix=f'({i}/{len(files_to_process)})')
-
-    # Estadísticas
-    successful_templates = 0
-    failed_templates = 0
-    total_questions_generated = 0
-
-    root = Element("quiz")
-    current_category: Optional[str] = None
-
-    for res in results:
-        if res["status"] == "error":
-            failed_templates += 1
-            print(f"\n  [!] No se pudo procesar '{res['filepath']}'. Razón: {res['reason']}", file=sys.stderr)
-        else:
-            successful_templates += 1
-            questions = res["questions"]
-            total_questions_generated += len(questions)
-
-            if not args.dry_run and questions:
-                # Construir categoría
-                fpath = res["filepath"]
-                dirpath = os.path.dirname(fpath)
-                relative_path = os.path.relpath(dirpath, args.source) if not args.template else "."
-                moodle_category_path = f"$course$/top/{args.category}"
-                if relative_path != ".":
-                    moodle_category_path += f"/{relative_path.replace(os.sep, '/')}"
-
-                if moodle_category_path != current_category:
-                    create_category_xml(root, moodle_category_path)
-                    current_category = moodle_category_path
-
-                for q in questions:
-                    create_moodle_question_xml(
-                        root, 
-                        q["template_info"], 
-                        q["display_code_instance"], 
-                        q["correct_answer"], 
-                        q["incorrect_answers"], 
-                        q["question_number"], 
-                        stdin_content=q["stdin_content"], 
-                        variables=q["variables"], 
-                        args=args
-                    )
-
-    # Escribir archivo XML si no es dry-run
-    if not args.dry_run and successful_templates > 0:
-        indent(root)
-        tree = ElementTree(root)
-        string_buffer = io.StringIO()
-        tree.write(string_buffer, encoding="unicode", xml_declaration=True)
-        xml_string = string_buffer.getvalue()
-
-        xml_string = xml_string.replace("&lt;![CDATA[", "<![CDATA[")
-        xml_string = xml_string.replace("]]&gt;", "]]>")
-        xml_string = xml_string.replace("&amp;", "&")
-        xml_string = xml_string.replace("&lt;", "<")
-        xml_string = xml_string.replace("&gt;", ">")
-        xml_string = xml_string.replace("<text><![CDATA[]]></text>", "<text></text>")
-
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(xml_string)
-
-    elapsed_time = time.time() - start_time
-
-    # Reporte y estadísticas post-ejecución
-    print("\n" + "=" * 55)
-    print(" 📊 REPORTE DE EJECUCIÓN")
-    print("=" * 55)
-    print(f" • Plantillas procesadas:   {len(files_to_process)}")
-    print(f" • Plantillas exitosas:     {successful_templates}")
-    print(f" • Plantillas fallidas:     {failed_templates}")
-    print(f" • Preguntas generadas:     {total_questions_generated}")
-    print(f" • Tiempo total:            {elapsed_time:.2f}s")
-    if not args.dry_run and successful_templates > 0:
-        print(f" • Archivo de salida:       {args.output}")
-    print("=" * 55 + "\n")
 
 if __name__ == "__main__":
-    main()
+    from idkfa.cli import app
+    app()
+
+
