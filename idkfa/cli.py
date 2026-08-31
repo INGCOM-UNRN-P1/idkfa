@@ -57,8 +57,9 @@ def _process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict
     return process_template_data(filepath, args_dict, config_dict)
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main_cmd(
+    ctx: typer.Context,
     source: Path = typer.Option(
         Path("templates"),
         "-s",
@@ -146,6 +147,9 @@ def main_cmd(
     ),
 ) -> None:
     """Genera cuestionarios XML para Moodle a partir de plantillas C ejecutadas y verificadas."""
+    if ctx.invoked_subcommand is not None:
+        return
+
     source_str = str(source)
     output_str = str(output)
     template_str = str(template) if template else None
@@ -297,9 +301,157 @@ def main_cmd(
     console.print("=" * 55 + "\n")
 
 
+@app.command("spellcheck")
+@app.command("grammar")
+@app.command("languagetool")
+def cmd_spellcheck(
+    paths: Optional[List[Path]] = typer.Argument(
+        None,
+        help="Plantillas .c, archivos .xml o directorios a revisar con LanguageTool.",
+    ),
+    server: Optional[str] = typer.Option(
+        None,
+        "--server",
+        "-s",
+        help="URL del servidor LanguageTool (por defecto http://localhost:8081 y API pública).",
+    ),
+    username: Optional[str] = typer.Option(
+        None,
+        "--username",
+        "-u",
+        help="Usuario / correo de LanguageTool Premium.",
+    ),
+    api_key: Optional[str] = typer.Option(
+        None,
+        "--api-key",
+        "-k",
+        help="API Key / Token de LanguageTool Premium.",
+    ),
+    premium: bool = typer.Option(
+        False,
+        "--premium",
+        help="Fuerza el uso de la API LanguageTool Premium.",
+    ),
+    lang: str = typer.Option(
+        "es-AR",
+        "--lang",
+        "-l",
+        help="Código de idioma para LanguageTool (ej: 'es-AR', 'es', 'en-US').",
+    ),
+    ignore_rules: Optional[str] = typer.Option(
+        None,
+        "--ignore-rules",
+        help="Reglas a ignorar separadas por comas.",
+    ),
+    ignore_words: Optional[str] = typer.Option(
+        None,
+        "--ignore-words",
+        help="Palabras personalizadas a ignorar separadas por comas.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emite salida estructurada en formato JSON.",
+    ),
+    output_md: Optional[Path] = typer.Option(
+        None,
+        "--md",
+        "--output-md",
+        "-o",
+        help="Genera reporte en formato Markdown.",
+    ),
+) -> None:
+    """Verifica ortografía y gramática en plantillas de C y cuestionarios generados usando LanguageTool."""
+    import json
+    from rich.table import Table
+    from rich.panel import Panel
+    from idkfa.languagetool_checker import (
+        analizar_archivo_languagetool,
+        generar_reporte_markdown_languagetool,
+    )
+
+    archivos_a_revisar = []
+    if paths:
+        for p in paths:
+            if p.is_file() and p.suffix.lower() in (".c", ".xml"):
+                archivos_a_revisar.append(p)
+            elif p.is_dir():
+                archivos_a_revisar.extend(sorted(p.glob("**/*.c")))
+                archivos_a_revisar.extend(sorted(p.glob("**/*.xml")))
+    else:
+        src = Path("templates")
+        if src.is_dir():
+            archivos_a_revisar.extend(sorted(src.glob("**/*.c")))
+
+    if not archivos_a_revisar:
+        console.print("[yellow]No se encontraron archivos (.c / .xml) para auditar con LanguageTool.[/yellow]")
+        raise typer.Exit(code=0)
+
+    reglas_ign = set(r.strip() for r in ignore_rules.split(",") if r.strip()) if ignore_rules else None
+    palabras_ign = set(w.strip() for w in ignore_words.split(",") if w.strip()) if ignore_words else None
+
+    todos_los_issues = []
+    for arch in archivos_a_revisar:
+        issues = analizar_archivo_languagetool(
+            arch,
+            lang=lang,
+            server_url=server,
+            username=username,
+            api_key=api_key,
+            premium=premium,
+            ignore_words=palabras_ign,
+            ignore_rules=reglas_ign,
+        )
+        todos_los_issues.extend(issues)
+
+    if output_md:
+        md_text = generar_reporte_markdown_languagetool(todos_los_issues)
+        output_md.parent.mkdir(parents=True, exist_ok=True)
+        output_md.write_text(md_text, encoding="utf-8")
+        console.print(f"[bold green]✓ Reporte Markdown generado en:[/bold green] [cyan]{output_md}[/cyan]")
+        raise typer.Exit(code=0 if not todos_los_issues else 1)
+
+    if json_output:
+        res = {
+            "total_archivos": len(archivos_a_revisar),
+            "total_issues": len(todos_los_issues),
+            "issues": [i.to_dict() for i in todos_los_issues],
+        }
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        raise typer.Exit(code=0 if not todos_los_issues else 1)
+
+    if not todos_los_issues:
+        console.print(Panel(
+            f"[bold green]✓ Plantillas y Preguntas Impecables[/bold green]\n"
+            f"Se analizaron {len(archivos_a_revisar)} archivos sin observaciones ortográficas.",
+            title="[bold green]LanguageTool Passed[/bold green]",
+            border_style="green",
+        ))
+        raise typer.Exit(code=0)
+
+    tabla = Table(title=f"⚠️ Observaciones de LanguageTool ({len(todos_los_issues)} encontradas)", border_style="yellow")
+    tabla.add_column("Archivo", style="bold cyan")
+    tabla.add_column("L:C", justify="center")
+    tabla.add_column("Error / Contexto", style="white")
+    tabla.add_column("Sugerencia", style="bold green")
+
+    for iss in todos_los_issues:
+        sug = ", ".join(iss.replacements[:2]) if iss.replacements else "[dim]—[/dim]"
+        tabla.add_row(
+            iss.file_path.name,
+            f"{iss.line}:{iss.column}",
+            f"[red]{iss.original_word}[/red] ({iss.context})",
+            sug,
+        )
+
+    console.print(tabla)
+    raise typer.Exit(code=1)
+
+
 def main() -> None:
     app()
 
 
 if __name__ == "__main__":
     main()
+
