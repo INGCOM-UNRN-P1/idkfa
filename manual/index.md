@@ -343,3 +343,12 @@ Podés encadenar `idkfa` con otras herramientas del ecosistema en una única lí
 idkfa generate templates/punteros.yaml -n 50 -o banco_ptr.xml && questions validate banco_ptr.xml
 ````
 
+---
+
+(manual-idkfa-seccion-plugins)=
+## 9. Extensión, Desarrollo de Plugins y API Python
+
+Para crear tus propias reglas, conectores de evaluación o integrar `idkfa` programáticamente en pipelines de CI/CD:
+
+- 👉 **Consultá la guía completa:** [Guía de Extensión y Creación de Plugins](plugins.md)
+
