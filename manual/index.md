@@ -173,3 +173,52 @@ check-idkfa:
 ````
 
 Ejecutá `make check-idkfa` antes de cada commit para asegurar que tu código conserve el estado de aprobación.
+
+---
+
+(manual-idkfa-arquitectura)=
+## 7. Arquitectura Interna y Mecanismo Técnico
+
+La herramienta **`idkfa`** implementa un motor de alta precisión basado en:
+
+- **Tecnología Núcleo:** `Procedural C Template Engine + GCC Runner en Sandbox + Moodle XML Serializer`.
+- **Aislamiento y Determinismo:** Diseñada para operar sin efectos colaterales en entornos de integración continua (CI), terminales de estudiantes y servidores docentes headless.
+- **Manejo de Errores Pedagógico:** Todo fallo de sintaxis, memoria o lógica se traduce en una acción prescriptiva concreta con su respectiva justificación técnica.
+
+---
+
+(manual-idkfa-ecosistema)=
+## 8. Integración y Conexión con el Ecosistema
+
+````{note}
+Ninguna herramienta opera de forma aislada. **`idkfa`** forma parte del pipeline integral de evaluación, verificación y enseñanza de la cátedra.
+````
+
+### Diagrama de Flujo e Interoperabilidad
+
+````{mermaid}
+graph TD
+    TPL[Plantillas YAML con Variables] --> IDK[Idkfa: Síntesis Procedural]
+    IDK -->|Compilación y Ejecución| GCC[GCC: Cálculo de Respuestas]
+    IDK -->|Cuestionarios XML Anti-Copia| MDL[Moodle-Toolbox: Bancos Campus]
+    IDK -->|Variantes de Seguimiento| ALU[Alucard: Exámenes Impresos]
+````
+
+### Matriz de Intercambio de Datos
+
+| Canal | Herramientas Conectadas | Tipo de Datos Transferidos |
+| :--- | :--- | :--- |
+| **Entradas (Inputs)** | - `Plantillas YAML con variables aleatorias y código C` | Código fuente, AST, binarios, testcases, contratos |
+| **Salidas (Outputs)** | - `moodle-toolbox (bancos XML)`
+- `alucarD (preguntas de parcial)` | Informes Markdown, diagnósticos Rich, JSON, actas |
+| **Sincronización** | `alucarD`, `moodle-toolbox`, `daedalus` | Validación cruzada, flags compartidos y autofix |
+
+### Pipeline de Integración Recomendado
+
+Podés encadenar `idkfa` con otras herramientas del ecosistema en una única línea de comando:
+
+````{code-block} bash
+# Pipeline de integración típico
+idkfa generate templates/punteros.yaml -n 50 -o banco_ptr.xml && questions validate banco_ptr.xml
+````
+
