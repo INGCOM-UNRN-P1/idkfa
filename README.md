@@ -1,5 +1,35 @@
 # `IDKFA`: Generador de Cuestionarios Moodle
 
+---
+
+## 🎯 Alcance
+
+### Qué cubre
+- Generación procedimental de cuestionarios didácticos y exámenes en formato Moodle XML.
+- Síntesis automatizada de variantes anti-copia a partir de plantillas con parámetros aleatorios.
+- Verificación rigurosa previa a la emisión: compilación obligatoria con GCC y ejecución contra Valgrind para garantizar cero advertencias y cero fugas de memoria en los ejemplos mostrados a los estudiantes.
+- Generación de preguntas de seguimiento de código (code tracing), opción múltiple y respuesta corta.
+
+### Qué no cubre (Límites y Delegación)
+- Corrección de exámenes físicos impresos mediante OMR (delegado a `alucard`).
+- Mantenimiento y normalización de bancos de preguntas GIFT existentes (delegado a `moodle-toolbox`).
+- Empaquetado SCORM para campus virtual (delegado a `scorm-tools`).
+
+---
+
+## 📋 Requisitos
+
+### Requisitos de Sistema y Entorno
+- Linux o WSL. Python >= 3.10.
+
+### Dependencias Externas y Binarios
+- `gcc`, `valgrind`.
+
+### Integración en el Ecosistema
+- CLI `idkfa`. Subcomando `idkfa doctor`.
+
+---
+
 ## 1. Introducción
 
 ### 1.1. Descripción del Proyecto
