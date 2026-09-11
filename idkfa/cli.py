@@ -448,6 +448,91 @@ def cmd_spellcheck(
     raise typer.Exit(code=1)
 
 
+@app.command("synth-bst")
+def cmd_synth_bst(
+    recorrido: str = typer.Option("inorden", "--recorrido", "-r", help="Tipo de recorrido: inorden, preorden, postorden."),
+    seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla pseudoaleatoria."),
+    json_output: bool = typer.Option(False, "--json", help="Emite salida estructurada en formato JSON."),
+) -> None:
+    """Sintetiza un árbol binario de búsqueda (BST) con recorrido C compilado y validado en GCC."""
+    import json
+    from idkfa.procedural_synth import generar_bst_y_recorrido
+    res = generar_bst_y_recorrido(tipo_recorrido=recorrido, seed=seed)
+    if json_output:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return
+    console.print(f"[bold green]✓ BST sintetizado ({recorrido}):[/bold green]")
+    console.print(f"Salida esperada: [cyan]{res['salida_esperada']}[/cyan] (GCC: {res['verificado_gcc']})")
+    print(res["codigo"])
+
+
+@app.command("synth-matrix")
+def cmd_synth_matrix(
+    filas: int = typer.Option(3, "--filas", "-f", help="Cantidad de filas."),
+    cols: int = typer.Option(3, "--cols", "-c", help="Cantidad de columnas."),
+    seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla pseudoaleatoria."),
+    json_output: bool = typer.Option(False, "--json", help="Emite salida estructurada en formato JSON."),
+) -> None:
+    """Sintetiza ejercicio de matrices bidimensionales y cálculo de índices con puntero plano."""
+    import json
+    from idkfa.procedural_synth import generar_matriz_2d_y_puntero_plano
+    res = generar_matriz_2d_y_puntero_plano(filas=filas, cols=cols, seed=seed)
+    if json_output:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return
+    console.print(f"[bold green]✓ Matriz 2D sintetizada ({filas}x{cols}):[/bold green]")
+    console.print(f"Valor objetivo: [cyan]{res['valor']}[/cyan] en [{res['f_target']}][{res['c_target']}]")
+    print(res["codigo"])
+
+
+@app.command("synth-linked-list")
+def cmd_synth_linked_list(
+    seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla pseudoaleatoria."),
+    json_output: bool = typer.Option(False, "--json", help="Emite salida estructurada en formato JSON."),
+) -> None:
+    """Sintetiza operaciones sobre listas enlazadas dinámicas en C validadas con GCC."""
+    import json
+    from idkfa.procedural_synth import generar_lista_enlazada_simple
+    res = generar_lista_enlazada_simple(seed=seed)
+    if json_output:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return
+    console.print(f"[bold green]✓ Lista enlazada sintetizada:[/bold green]")
+    console.print(f"Salida esperada: [cyan]{res['salida_esperada']}[/cyan]")
+    print(res["codigo"])
+
+
+@app.command("synth-tf")
+def cmd_synth_tf(
+    tema: str = typer.Option("arrays_decay", "--tema", "-t", help="arrays_decay, sizeof_pointer, free_null, string_null_terminator."),
+    json_output: bool = typer.Option(False, "--json", help="Emite salida estructurada en formato JSON."),
+) -> None:
+    """Genera pregunta conceptual de Verdadero/Falso con justificación técnica."""
+    import json
+    from idkfa.procedural_synth import generar_pregunta_verdadero_falso_con_justificacion
+    res = generar_pregunta_verdadero_falso_con_justificacion(tema)
+    if json_output:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return
+    console.print(f"[bold cyan]Enunciado:[/bold cyan] {res['enunciado']}")
+    console.print(f"[bold yellow]Respuesta:[/bold yellow] {'Verdadero' if res['es_verdadero'] else 'Falso'}")
+    console.print(f"[bold green]Justificación:[/bold green] {res['justificacion']}")
+
+
+@app.command("export-standalone")
+def cmd_export_standalone(
+    archivo_c: Path = typer.Argument(..., help="Archivo C a empaquetar con autoevaluación assert()."),
+    salida: Path = typer.Option(Path("standalone_autoeval.c"), "--output", "-o", help="Ruta del archivo de salida."),
+) -> None:
+    """Exporta snippet a formato C ejecutable independiente con asserts de autoevaluación."""
+    from idkfa.procedural_synth import exportar_snippet_con_asserts
+    codigo = archivo_c.read_text(encoding="utf-8")
+    standalone = exportar_snippet_con_asserts(codigo, "0")
+    salida.write_text(standalone, encoding="utf-8")
+    console.print(f"[bold green]✓ Snippet autónomo con assert() exportado en:[/bold green] [cyan]{salida}[/cyan]")
+
+
+
 def main() -> None:
     app()
 
