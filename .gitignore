@@ -2,3 +2,6 @@ generated/*
 compile_errors.log
 cuestionario_moodle.xml
 __pycache__/
+*.py[cod]
+
+.pytest_cache/
