@@ -7,11 +7,36 @@ name = "idkfa"
 version = "0.2.0"
 description = "Generador de cuestionarios Moodle XML desde plantillas C con autocompletado y CLI moderna"
 readme = "README.md"
-requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+authors = [
+    {name = "Martín René Vilugrón", email = "martinvilu@gmail.com"}
+]
+maintainers = [
+    {name = "Programación I [B6003] - UNRN Andina"}
+]
+requires-python = ">=3.11"
+keywords = ["education", "c-programming", "pedagogical-tools", "unrn"]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/INGCOM-UNRN-P1/idkfa"
+Repository = "https://github.com/INGCOM-UNRN-P1/idkfa.git"
+Issues = "https://github.com/INGCOM-UNRN-P1/idkfa/issues"
 
 [project.optional-dependencies]
 dev = [
