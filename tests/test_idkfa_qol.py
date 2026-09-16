@@ -45,3 +45,20 @@ def test_gift_exporter():
     assert "::Trazas P1::" in res
     assert "=0" in res
     assert "~1" in res
+
+
+def test_cli_doctor():
+    from typer.testing import CliRunner
+    from idkfa.cli import app
+    runner = CliRunner()
+
+    res = runner.invoke(app, ["doctor"])
+    assert res.exit_code == 0
+    assert "Diagnóstico del Entorno IDKFA" in res.output
+
+    res_json = runner.invoke(app, ["doctor", "--json"])
+    assert res_json.exit_code == 0
+    assert '"schema_version": "1.0.0"' in res_json.output
+    assert '"herramienta": "idkfa"' in res_json.output
+    assert '"ok": true' in res_json.output
+
