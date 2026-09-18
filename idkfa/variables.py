@@ -20,6 +20,24 @@ class DistractorOption(str):
     def text(self) -> str:
         return str(self)
 
+
+PLACEHOLDER_PATTERN = re.compile(r"__[a-zA-Z0-9_]+__")
+
+
+def find_unresolved_placeholders(text: Any) -> List[str]:
+    """Busca y retorna todos los placeholders sin resolver (__var__) presentes en el texto."""
+    if text is None:
+        return []
+    return PLACEHOLDER_PATTERN.findall(str(text))
+
+
+def contains_unresolved_placeholders(text: Any) -> bool:
+    """Verifica si el texto contiene al menos un placeholder sin resolver (__var__)."""
+    if text is None:
+        return False
+    return bool(PLACEHOLDER_PATTERN.search(str(text)))
+
+
 def generate_vars(var_defs: Dict[str, str]) -> Dict[str, Any]:
     """Genera un conjunto de valores concretos a partir de las definiciones de variables, soportando dependencias."""
     generated: Dict[str, Any] = {}
@@ -180,6 +198,8 @@ def generate_incorrect_answers(
     # 1. Opciones predefinidas
     for opt in predefined_options:
         opt_str = str(opt).strip()
+        for var_name, var_value in variables.items():
+            opt_str = opt_str.replace(f"__{var_name}__", str(var_value))
         norm_opt = normalize_answer_repr(opt_str)
         if norm_opt and norm_opt not in seen_normalized and not is_mathematically_trivial(opt_str, correct_answer):
             seen_normalized.add(norm_opt)

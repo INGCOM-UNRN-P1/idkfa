@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 from typing import List, Dict, Any
+from idkfa.variables import find_unresolved_placeholders
 
 
 def exportar_pregunta_gift(
@@ -13,6 +14,16 @@ def exportar_pregunta_gift(
     distractores: List[str],
 ) -> str:
     """Genera una pregunta de opción múltiple en formato GIFT con bloque preformateado."""
+    unresolved: List[str] = []
+    unresolved.extend(find_unresolved_placeholders(codigo_c))
+    unresolved.extend(find_unresolved_placeholders(str(respuesta_correcta)))
+    for d in distractores:
+        unresolved.extend(find_unresolved_placeholders(str(d)))
+
+    if unresolved:
+        unique_phs = sorted(list(set(unresolved)))
+        raise ValueError(f"Pregunta GIFT '{titulo}' contiene placeholders sin resolver: {', '.join(unique_phs)}")
+
     codigo_limpio = html.escape(codigo_c.strip())
     
     opciones = [f"={respuesta_correcta}"]

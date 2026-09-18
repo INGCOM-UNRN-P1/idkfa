@@ -23,7 +23,9 @@ from idkfa.variables import (
     normalize_answer_repr,
     adapt_grammar_and_pluralization,
     is_mathematically_trivial,
-    DistractorOption
+    DistractorOption,
+    find_unresolved_placeholders,
+    contains_unresolved_placeholders,
 )
 from idkfa.moodle_xml import (
     CDATA,
@@ -126,6 +128,40 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
         for old, new in substitutions.items():
             display_code_instance = display_code_instance.replace(old, new)
 
+        # Validación estricta: ningún placeholder sin resolver (__var__) debe llegar a la salida final ni a las respuestas
+        placeholders_err: List[str] = []
+        phs_code = find_unresolved_placeholders(display_code_instance)
+        if phs_code:
+            placeholders_err.append(f"código C ({', '.join(sorted(set(phs_code)))})")
+        phs_correct = find_unresolved_placeholders(correct_answer)
+        if phs_correct:
+            placeholders_err.append(f"respuesta correcta ({', '.join(sorted(set(phs_correct)))})")
+        phs_inc = []
+        for ans_opt in incorrect_answers:
+            phs_inc.extend(find_unresolved_placeholders(ans_opt))
+        if phs_inc:
+            placeholders_err.append(f"distractor ({', '.join(sorted(set(phs_inc)))})")
+        if stdin_input:
+            phs_stdin = find_unresolved_placeholders(stdin_input)
+            if phs_stdin:
+                placeholders_err.append(f"stdin ({', '.join(sorted(set(phs_stdin)))})")
+
+        if placeholders_err:
+            msg_err = f"Placeholder no resuelto en variante {idx + 1}: {'; '.join(placeholders_err)}"
+            if log_file_path:
+                with open(log_file_path, "a", encoding='utf-8') as log:
+                    log.write(f"--- PLACEHOLDER ERROR [{datetime.datetime.now()}] ---\n")
+                    log.write(f"File: {filename}\n")
+                    log.write(f"Reason: {msg_err}\n")
+                    log.write("-" * 40 + "\n\n")
+            return {
+                "status": "error",
+                "filepath": filepath,
+                "filename": filename,
+                "reason": msg_err,
+                "questions": []
+            }
+
         generated_questions.append({
             "template_info": template_info,
             "display_code_instance": display_code_instance,
@@ -208,6 +244,11 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
             for name, value in variables.items():
                 code_instance = code_instance.replace(f"__{name}__", str(value))
             
+            phs_code = find_unresolved_placeholders(code_instance)
+            if phs_code:
+                print(f"    [!] Error en variante {generated_count + 1}: Placeholders no resueltos en código C ({', '.join(sorted(set(phs_code)))}).", file=sys.stderr)
+                continue
+
             variant_filename = f"{base_name}_v{generated_count + 1}.c"
             variant_path = os.path.join(output_subdir, variant_filename)
             

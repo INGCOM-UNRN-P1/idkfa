@@ -5,7 +5,7 @@ import sys
 from xml.etree.ElementTree import SubElement, Element
 from typing import Dict, List, Optional, Any, Union
 from idkfa.config import CONFIG
-from idkfa.variables import normalize_answer_repr, DistractorOption, adapt_grammar_and_pluralization
+from idkfa.variables import normalize_answer_repr, DistractorOption, adapt_grammar_and_pluralization, find_unresolved_placeholders
 
 def CDATA(text: Any) -> str:
     """Envuelve el texto para la conversión a CDATA."""
@@ -76,6 +76,22 @@ def create_moodle_question_xml(
     if fb_template and variables:
         fb_text = evaluate_feedback(fb_template, variables)
     SubElement(SubElement(q_node, "generalfeedback", format="markdown"), "text").text = CDATA(fb_text)
+
+    # Validar que no existan placeholders sin resolver (__var__) en enunciado, respuestas o feedback
+    unresolved: List[str] = []
+    unresolved.extend(find_unresolved_placeholders(question_text_with_code))
+    unresolved.extend(find_unresolved_placeholders(str(correct_answer)))
+    for opt in incorrect_answers:
+        ans_text = opt.text if isinstance(opt, DistractorOption) else str(opt)
+        unresolved.extend(find_unresolved_placeholders(ans_text))
+        if isinstance(opt, DistractorOption) and opt.feedback:
+            unresolved.extend(find_unresolved_placeholders(opt.feedback))
+    if fb_text:
+        unresolved.extend(find_unresolved_placeholders(fb_text))
+
+    if unresolved:
+        unique_phs = sorted(list(set(unresolved)))
+        raise ValueError(f"Pregunta '{numbered_name}' contiene placeholders sin resolver: {', '.join(unique_phs)}")
 
     # Configuración de defaultgrade y penalty
     default_grade = template_info.get("default_grade") if hasattr(template_info, "get") else getattr(template_info, "default_grade", None)
