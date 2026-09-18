@@ -47,6 +47,32 @@ def _print_progress_bar(iteration: int, total: int, prefix: str = '', suffix: st
         sys.stdout.write('\n')
 
 
+def _emitir_json_generacion(
+    procesadas: int,
+    exitosas: int,
+    fallidas: int,
+    preguntas: int,
+    archivo_salida: Optional[str],
+    dry_run: bool,
+    errores: List[Dict[str, str]],
+    segundos: float,
+) -> None:
+    import json
+
+    print(json.dumps({
+        "schema_version": "1.0.0",
+        "ok": fallidas == 0,
+        "dry_run": dry_run,
+        "plantillas_procesadas": procesadas,
+        "plantillas_exitosas": exitosas,
+        "plantillas_fallidas": fallidas,
+        "preguntas_generadas": preguntas,
+        "archivo_salida": archivo_salida,
+        "errores": errores,
+        "tiempo_segundos": round(segundos, 3),
+    }, indent=2, ensure_ascii=False))
+
+
 def _generate_c_code_only(args: CliArgs) -> None:
     from generador import generate_c_code_only
     generate_c_code_only(args)
@@ -145,10 +171,21 @@ def main_cmd(
         "--log-file",
         help="Ruta al archivo de log.",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr).",
+    ),
 ) -> None:
     """Genera cuestionarios XML para Moodle a partir de plantillas C ejecutadas y verificadas."""
     if ctx.invoked_subcommand is not None:
         return
+
+    if json_output and generate_only:
+        err_console.print("[bold red]Error:[/bold red] --json no se puede combinar con --generate-only.")
+        sys.exit(2)
+    # Con --json la salida humana se desvía a stderr: stdout queda como JSON puro.
+    salida = err_console if json_output else console
 
     source_str = str(source)
     output_str = str(output)
@@ -201,12 +238,14 @@ def main_cmd(
                     files_to_process.append((os.path.join(dirpath, filename), dirpath))
 
     if not files_to_process:
-        console.print("[yellow][!] No se encontraron archivos .c para procesar.[/yellow]")
+        salida.print("[yellow][!] No se encontraron archivos .c para procesar.[/yellow]")
+        if json_output:
+            _emitir_json_generacion(0, 0, 0, 0, None, dry_run, [], 0.0)
         return
 
-    console.print(f"🚀 Procesando {len(files_to_process)} plantilla(s) con {jobs} worker(s)...")
+    salida.print(f"🚀 Procesando {len(files_to_process)} plantilla(s) con {jobs} worker(s)...")
     if dry_run:
-        console.print("[cyan]🔍 MODO VALIDACIÓN / DRY-RUN ACTIVO (no se escribirá archivo XML).[/cyan]")
+        salida.print("[cyan]🔍 MODO VALIDACIÓN / DRY-RUN ACTIVO (no se escribirá archivo XML).[/cyan]")
 
     start_time = time.time()
     args_dict = vars(args_obj)
@@ -221,16 +260,19 @@ def main_cmd(
             for i, future in enumerate(as_completed(future_to_file), 1):
                 res = future.result()
                 results.append(res)
-                _print_progress_bar(i, len(files_to_process), prefix="Progreso:", suffix=f"({i}/{len(files_to_process)})")
+                if not json_output:
+                    _print_progress_bar(i, len(files_to_process), prefix="Progreso:", suffix=f"({i}/{len(files_to_process)})")
     else:
         for i, (fpath, _) in enumerate(files_to_process, 1):
             res = _process_template_data(fpath, args_dict, CONFIG)
             results.append(res)
-            _print_progress_bar(i, len(files_to_process), prefix="Progreso:", suffix=f"({i}/{len(files_to_process)})")
+            if not json_output:
+                _print_progress_bar(i, len(files_to_process), prefix="Progreso:", suffix=f"({i}/{len(files_to_process)})")
 
     successful_templates = 0
     failed_templates = 0
     total_questions_generated = 0
+    errores: List[Dict[str, str]] = []
 
     root = Element("quiz")
     current_category: Optional[str] = None
@@ -238,6 +280,7 @@ def main_cmd(
     for res in results:
         if res["status"] == "error":
             failed_templates += 1
+            errores.append({"plantilla": str(res["filepath"]), "razon": str(res["reason"])})
             err_console.print(f"[red][!] No se pudo procesar '{res['filepath']}'. Razón: {res['reason']}[/red]")
         else:
             successful_templates += 1
@@ -288,17 +331,27 @@ def main_cmd(
 
     elapsed_time = time.time() - start_time
 
-    console.print("\n" + "=" * 55)
-    console.print(" 📊 REPORTE DE EJECUCIÓN")
-    console.print("=" * 55)
-    console.print(f" • Plantillas procesadas:   {len(files_to_process)}")
-    console.print(f" • Plantillas exitosas:     {successful_templates}")
-    console.print(f" • Plantillas fallidas:     {failed_templates}")
-    console.print(f" • Preguntas generadas:     {total_questions_generated}")
-    console.print(f" • Tiempo total:            {elapsed_time:.2f}s")
-    if not dry_run and successful_templates > 0:
-        console.print(f" • Archivo de salida:       {output_str}")
-    console.print("=" * 55 + "\n")
+    escribio_xml = not dry_run and successful_templates > 0
+    if json_output:
+        _emitir_json_generacion(
+            len(files_to_process), successful_templates, failed_templates, total_questions_generated,
+            output_str if escribio_xml else None, dry_run, errores, elapsed_time,
+        )
+    else:
+        console.print("\n" + "=" * 55)
+        console.print(" 📊 REPORTE DE EJECUCIÓN")
+        console.print("=" * 55)
+        console.print(f" • Plantillas procesadas:   {len(files_to_process)}")
+        console.print(f" • Plantillas exitosas:     {successful_templates}")
+        console.print(f" • Plantillas fallidas:     {failed_templates}")
+        console.print(f" • Preguntas generadas:     {total_questions_generated}")
+        console.print(f" • Tiempo total:            {elapsed_time:.2f}s")
+        if escribio_xml:
+            console.print(f" • Archivo de salida:       {output_str}")
+        console.print("=" * 55 + "\n")
+
+    if failed_templates > 0:
+        raise typer.Exit(1)
 
 
 @app.command("spellcheck")
@@ -417,7 +470,7 @@ def cmd_spellcheck(
             "total_issues": len(todos_los_issues),
             "issues": [i.to_dict() for i in todos_los_issues],
         }
-        print(json.dumps(res, indent=2, ensure_ascii=False))
+        print(json.dumps({"schema_version": "1.0.0", **res}, indent=2, ensure_ascii=False))
         raise typer.Exit(code=0 if not todos_los_issues else 1)
 
     if not todos_los_issues:
@@ -459,7 +512,7 @@ def cmd_synth_bst(
     from idkfa.procedural_synth import generar_bst_y_recorrido
     res = generar_bst_y_recorrido(tipo_recorrido=recorrido, seed=seed)
     if json_output:
-        print(json.dumps(res, indent=2, ensure_ascii=False))
+        print(json.dumps({"schema_version": "1.0.0", **res}, indent=2, ensure_ascii=False))
         return
     console.print(f"[bold green]✓ BST sintetizado ({recorrido}):[/bold green]")
     console.print(f"Salida esperada: [cyan]{res['salida_esperada']}[/cyan] (GCC: {res['verificado_gcc']})")
@@ -478,7 +531,7 @@ def cmd_synth_matrix(
     from idkfa.procedural_synth import generar_matriz_2d_y_puntero_plano
     res = generar_matriz_2d_y_puntero_plano(filas=filas, cols=cols, seed=seed)
     if json_output:
-        print(json.dumps(res, indent=2, ensure_ascii=False))
+        print(json.dumps({"schema_version": "1.0.0", **res}, indent=2, ensure_ascii=False))
         return
     console.print(f"[bold green]✓ Matriz 2D sintetizada ({filas}x{cols}):[/bold green]")
     console.print(f"Valor objetivo: [cyan]{res['valor']}[/cyan] en [{res['f_target']}][{res['c_target']}]")
@@ -495,7 +548,7 @@ def cmd_synth_linked_list(
     from idkfa.procedural_synth import generar_lista_enlazada_simple
     res = generar_lista_enlazada_simple(seed=seed)
     if json_output:
-        print(json.dumps(res, indent=2, ensure_ascii=False))
+        print(json.dumps({"schema_version": "1.0.0", **res}, indent=2, ensure_ascii=False))
         return
     console.print(f"[bold green]✓ Lista enlazada sintetizada:[/bold green]")
     console.print(f"Salida esperada: [cyan]{res['salida_esperada']}[/cyan]")
@@ -512,7 +565,7 @@ def cmd_synth_tf(
     from idkfa.procedural_synth import generar_pregunta_verdadero_falso_con_justificacion
     res = generar_pregunta_verdadero_falso_con_justificacion(tema)
     if json_output:
-        print(json.dumps(res, indent=2, ensure_ascii=False))
+        print(json.dumps({"schema_version": "1.0.0", **res}, indent=2, ensure_ascii=False))
         return
     console.print(f"[bold cyan]Enunciado:[/bold cyan] {res['enunciado']}")
     console.print(f"[bold yellow]Respuesta:[/bold yellow] {'Verdadero' if res['es_verdadero'] else 'Falso'}")
