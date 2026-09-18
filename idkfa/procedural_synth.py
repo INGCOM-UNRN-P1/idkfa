@@ -15,6 +15,33 @@ from __future__ import annotations
 import random
 from typing import Dict, List, Any, Optional
 from idkfa.compiler import compile_and_run_c
+from idkfa.leak_checker import verificar_memory_leaks
+
+
+def verificar_snippet(codigo_c: str, timeout: int = 5) -> Dict[str, Any]:
+    """Verificación previa a la emisión: compilación estricta y cero fugas.
+
+    El README promete "ejecución contra Valgrind para garantizar cero
+    advertencias y cero fugas de memoria", pero `verificar_memory_leaks`
+    existía sin que ningún módulo del flujo lo invocara. El costo de esa
+    desconexión no era teórico: las plantillas de BST y de lista enlazada
+    emitían snippets que perdían 120 y 48 bytes, y se publicaban como material
+    de examen en una materia donde liberar la memoria es la regla.
+    """
+    res_comp = compile_and_run_c(codigo_c, timeout=timeout, base_flags=["-Wall", "-Wextra", "-Werror"])
+    verificado_gcc = res_comp.get("status") == "success"
+
+    leaks = {"valgrind_disponible": False, "sin_leaks": True, "detalle": "No evaluado: la compilación falló."}
+    if verificado_gcc:
+        leaks = verificar_memory_leaks(codigo_c)
+
+    return {
+        "verificado_gcc": verificado_gcc,
+        "salida_gcc": res_comp.get("output", ""),
+        "sin_leaks": leaks["sin_leaks"],
+        "valgrind_disponible": leaks["valgrind_disponible"],
+        "detalle_memoria": leaks["detalle"],
+    }
 
 
 def renombrar_identificadores_tematico(codigo: str, tema: str = "videojuegos") -> str:
@@ -139,7 +166,10 @@ typedef struct Nodo {{
 }} Nodo;
 
 Nodo* crear(int v) {{
-    Nodo* n = (Nodo*)malloc(sizeof(Nodo));
+    Nodo* n = malloc(sizeof(Nodo));
+    if (n == NULL) {{
+        return NULL;
+    }}
     n->dato = v;
     n->izq = n->der = NULL;
     return n;
@@ -154,23 +184,29 @@ Nodo* insertar(Nodo* raiz, int v) {{
 
 {fn_traverse}
 
+void liberar(Nodo* raiz) {{
+    if (!raiz) return;
+    liberar(raiz->izq);
+    liberar(raiz->der);
+    free(raiz);
+}}
+
 int main(void) {{
     Nodo* raiz = NULL;
 {insert_stmts}
     imprimir(raiz);
     printf("\\n");
+    liberar(raiz);
     return 0;
 }}
 """
-    # Verificación en GCC
-    res_comp = compile_and_run_c(codigo_c, timeout=5, base_flags=["-Wall", "-Wextra", "-Werror"])
+    verificacion = verificar_snippet(codigo_c)
     return {
         "codigo": codigo_c,
         "salida_esperada": salida_esperada,
         "valores": valores,
         "tipo_recorrido": tipo_recorrido,
-        "verificado_gcc": res_comp.get("status") == "success",
-        "salida_gcc": res_comp.get("output", "")
+        **verificacion,
     }
 
 
@@ -203,7 +239,7 @@ int main(void) {{
     return 0;
 }}
 """
-    res_comp = compile_and_run_c(codigo_c, timeout=5, base_flags=["-Wall", "-Wextra", "-Werror"])
+    verificacion = verificar_snippet(codigo_c)
     return {
         "codigo": codigo_c,
         "salida_esperada": f"{valor_correcto} {valor_correcto}",
@@ -213,7 +249,7 @@ int main(void) {{
         "c_target": c_target,
         "offset_plano": offset_plano,
         "valor": valor_correcto,
-        "verificado_gcc": res_comp.get("status") == "success"
+        **verificacion
     }
 
 
@@ -237,7 +273,10 @@ typedef struct Nodo {{
 }} Nodo;
 
 void push(Nodo** head, int val) {{
-    Nodo* nuevo = (Nodo*)malloc(sizeof(Nodo));
+    Nodo* nuevo = malloc(sizeof(Nodo));
+    if (nuevo == NULL) {{
+        return;
+    }}
     nuevo->val = val;
     nuevo->sig = *head;
     *head = nuevo;
@@ -264,15 +303,19 @@ int main(void) {{
         cur = cur->sig;
     }}
     printf("\\n");
+
+    while (lista) {{
+        pop(&lista);
+    }}
     return 0;
 }}
 """
     salida_esperada = f"{nums[3]} {nums[0]}"
-    res_comp = compile_and_run_c(codigo_c, timeout=5, base_flags=["-Wall", "-Wextra", "-Werror"])
+    verificacion = verificar_snippet(codigo_c)
     return {
         "codigo": codigo_c,
-        "salida_esperada": res_comp.get("output", salida_esperada),
-        "verificado_gcc": res_comp.get("status") == "success"
+        "salida_esperada": verificacion["salida_gcc"] or salida_esperada,
+        **verificacion,
     }
 
 
@@ -328,14 +371,14 @@ int main(void) {{
 }}
 """
     salida_esperada = f"{a} {b + 1} {(a + 1) + (b + 1)}"
-    res_comp = compile_and_run_c(codigo_c, timeout=5, base_flags=["-Wall", "-Wextra", "-Werror"])
+    verificacion = verificar_snippet(codigo_c)
     return {
         "codigo": codigo_c,
         "salida_esperada": salida_esperada,
         "r1": a,
         "r2": b + 1,
         "r3": (a + 1) + (b + 1),
-        "verificado_gcc": res_comp.get("status") == "success"
+        **verificacion,
     }
 
 
