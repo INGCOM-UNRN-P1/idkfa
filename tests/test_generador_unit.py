@@ -243,4 +243,4 @@ class TestGeneradorUnit(unittest.TestCase):
         test_args = ["generador.py", "-h"]
         with patch("sys.argv", test_args):
             with self.assertRaises(SystemExit):
-                runpy.run_module("generador", run_name="__main__")
+                runpy.run_module("idkfa.generacion", run_name="__main__")

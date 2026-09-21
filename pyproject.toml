@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.scripts]
-idkfa = "generador:main"
+idkfa = "idkfa.generacion:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["idkfa"]

@@ -74,12 +74,12 @@ def _emitir_json_generacion(
 
 
 def _generate_c_code_only(args: CliArgs) -> None:
-    from generador import generate_c_code_only
+    from idkfa.generacion import generate_c_code_only
     generate_c_code_only(args)
 
 
 def _process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    from generador import process_template_data
+    from idkfa.generacion import process_template_data
     return process_template_data(filepath, args_dict, config_dict)
 
 
