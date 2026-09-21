@@ -60,9 +60,17 @@ class TestGeneradorUnit(unittest.TestCase):
             with open(tmpl_err, "w", encoding="utf-8") as f:
                 f.write("// Q\nint main(){}\n// A\n/*name Err*/\n/*var\nx: [0]\n*/\n/*correcta\n# 10 / __x__\n*/\n")
 
-            res_err = generador.process_template_data(tmpl_err, args_dict, config_dict)
+            log_err_file = os.path.join(tmpdir, "err.log")
+            args_dict_log = {"output": "out.xml", "num": 1, "log_file": log_err_file}
+            res_err = generador.process_template_data(tmpl_err, args_dict_log, config_dict)
             self.assertEqual(res_err["status"], "success")
             self.assertEqual(len(res_err["questions"]), 0)
+            self.assertTrue(os.path.exists(log_err_file))
+            with open(log_err_file, "r", encoding="utf-8") as f:
+                err_log_content = f.read()
+            self.assertIn("--- PYTHON EVAL ERROR", err_log_content)
+            self.assertIn("Type: Correct Answer Expression", err_log_content)
+            self.assertIn("ZeroDivisionError", err_log_content)
 
     def test_process_template_data_compile_failure(self):
         with tempfile.TemporaryDirectory() as tmpdir:

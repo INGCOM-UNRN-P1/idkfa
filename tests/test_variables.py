@@ -1,3 +1,4 @@
+import os
 import unittest
 import sys
 import io
@@ -214,3 +215,42 @@ class TestVariables(unittest.TestCase):
         with patch("re.sub", side_effect=TypeError("mock re.sub error")):
             res_top_err = generate_stdin("raw stdin", {"a": 1})
             self.assertEqual(res_top_err, "raw stdin")
+
+    def test_python_eval_errors_logged(self, tmp_path=None):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tf:
+            log_path = tf.name
+
+        try:
+            # 1. Distractor with syntax error / runtime error
+            generate_incorrect_answers(
+                correct_answer="42",
+                predefined_options=[],
+                distractor_expressions=["1 / 0", "def invalid syntax"],
+                variables={"x": 10},
+                count=3,
+                template_name="test_template.c",
+                log_file=log_path
+            )
+
+            # 2. Variable with eval error
+            generate_vars(
+                {"bad_var": "1 / 0", "syntax_err": "bad(syntax"},
+                template_name="test_template.c",
+                log_file=log_path
+            )
+
+            with open(log_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("--- PYTHON EVAL ERROR", content)
+            self.assertIn("Template: test_template.c", content)
+            self.assertIn("Type: Distractor Expression", content)
+            self.assertIn("Expression: 1 / 0", content)
+            self.assertIn("ZeroDivisionError", content)
+            self.assertIn("Type: Variable Definition ('bad_var')", content)
+            self.assertIn("Type: Variable Definition ('syntax_err')", content)
+        finally:
+            if os.path.exists(log_path):
+                os.remove(log_path)
+

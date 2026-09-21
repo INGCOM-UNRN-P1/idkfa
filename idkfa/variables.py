@@ -38,12 +38,16 @@ def contains_unresolved_placeholders(text: Any) -> bool:
     return bool(PLACEHOLDER_PATTERN.search(str(text)))
 
 
-def generate_vars(var_defs: Dict[str, str]) -> Dict[str, Any]:
+def generate_vars(
+    var_defs: Dict[str, str],
+    template_name: Optional[str] = None,
+    log_file: Optional[str] = None
+) -> Dict[str, Any]:
     """Genera un conjunto de valores concretos a partir de las definiciones de variables, soportando dependencias."""
     generated: Dict[str, Any] = {}
     for name, definition in var_defs.items():
+        def_str = definition
         try:
-            def_str = definition
             for prev_name, prev_val in generated.items():
                 def_str = def_str.replace(f"__{prev_name}__", str(prev_val))
             
@@ -55,10 +59,29 @@ def generate_vars(var_defs: Dict[str, str]) -> Dict[str, Any]:
                 generated[name] = value_pool
         except Exception as e:
             print(f"  [!] Error evaluando la definición de variable '{name}': {e}", file=sys.stderr)
+            if log_file:
+                try:
+                    import datetime
+                    with open(log_file, "a", encoding="utf-8") as log:
+                        log.write(f"--- PYTHON EVAL ERROR [{datetime.datetime.now()}] ---\n")
+                        if template_name:
+                            log.write(f"Template: {template_name}\n")
+                        log.write(f"Type: Variable Definition ('{name}')\n")
+                        log.write(f"Definition: {definition}\n")
+                        log.write(f"Evaluated Expression: {def_str}\n")
+                        log.write(f"Error: {type(e).__name__}: {e}\n")
+                        log.write("-" * 40 + "\n\n")
+                except Exception:
+                    pass
             generated[name] = ""
     return generated
 
-def generate_all_variants_deterministically(var_defs: Dict[str, str], max_count: int) -> List[Dict[str, Any]]:
+def generate_all_variants_deterministically(
+    var_defs: Dict[str, str], 
+    max_count: int,
+    template_name: Optional[str] = None,
+    log_file: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
     Genera combinaciones deterministas de variables.
     Si el espacio cartesiano es enumerable y finito, muestrea sin reemplazo.
@@ -105,7 +128,7 @@ def generate_all_variants_deterministically(var_defs: Dict[str, str], max_count:
     
     while len(unique_variants) < max_count and attempts < max_attempts:
         attempts += 1
-        vars_inst = generate_vars(var_defs)
+        vars_inst = generate_vars(var_defs, template_name=template_name, log_file=log_file)
         var_key = tuple(sorted(vars_inst.items()))
         if var_key not in seen:
             seen.add(var_key)
@@ -187,7 +210,8 @@ def generate_incorrect_answers(
     distractor_expressions: Union[List[str], List[DistractorDef]], 
     variables: Dict[str, Any], 
     count: int = 3,
-    template_name: Optional[str] = None
+    template_name: Optional[str] = None,
+    log_file: Optional[str] = None
 ) -> List[DistractorOption]:
     """Genera una lista de respuestas incorrectas con feedback específico y filtro de trivialidad."""
     norm_correct = normalize_answer_repr(correct_answer)
@@ -241,6 +265,20 @@ def generate_incorrect_answers(
             origin_info = f" [{template_name}]" if template_name else ""
             sys.stderr.write(f"\n    [!] Advertencia{origin_info}: No se pudo calcular el distractor '{expr}': {e}\n")
             sys.stderr.flush()
+            if log_file:
+                try:
+                    import datetime
+                    with open(log_file, "a", encoding="utf-8") as log:
+                        log.write(f"--- PYTHON EVAL ERROR [{datetime.datetime.now()}] ---\n")
+                        if template_name:
+                            log.write(f"Template: {template_name}\n")
+                        log.write(f"Type: Distractor Expression\n")
+                        log.write(f"Expression: {expr}\n")
+                        log.write(f"Evaluated Expression: {temp_expr}\n")
+                        log.write(f"Error: {type(e).__name__}: {e}\n")
+                        log.write("-" * 40 + "\n\n")
+                except Exception:
+                    pass
 
     # 3. Generación aleatoria de offsets numéricos no triviales
     try:

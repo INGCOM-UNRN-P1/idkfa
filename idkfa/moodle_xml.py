@@ -13,7 +13,12 @@ def CDATA(text: Any) -> str:
         return str(text)
     return f"<![CDATA[{text}]]>"
 
-def evaluate_feedback(feedback_template: Optional[str], variables: Dict[str, Any]) -> str:
+def evaluate_feedback(
+    feedback_template: Optional[str], 
+    variables: Dict[str, Any],
+    template_name: Optional[str] = None,
+    log_file: Optional[str] = None
+) -> str:
     """Genera el texto de retroalimentación reemplazando variables y expresiones."""
     if not feedback_template:
         return ""
@@ -27,7 +32,20 @@ def evaluate_feedback(feedback_template: Optional[str], variables: Dict[str, Any
             try:
                 val = eval(expr_str, {}, variables)
                 return str(val)
-            except Exception:
+            except Exception as e:
+                if log_file:
+                    try:
+                        import datetime
+                        with open(log_file, "a", encoding="utf-8") as log:
+                            log.write(f"--- PYTHON EVAL ERROR [{datetime.datetime.now()}] ---\n")
+                            if template_name:
+                                log.write(f"Template: {template_name}\n")
+                            log.write(f"Type: Feedback Expression\n")
+                            log.write(f"Expression: {expr_str}\n")
+                            log.write(f"Error: {type(e).__name__}: {e}\n")
+                            log.write("-" * 40 + "\n\n")
+                    except Exception:
+                        pass
                 return match.group(0)
 
         fb_content = re.sub(r'\{([^}]+)\}', replace_expr, fb_content)
@@ -74,7 +92,9 @@ def create_moodle_question_xml(
     fb_text = ""
     fb_template = template_info.get("feedback_template") if hasattr(template_info, "get") else getattr(template_info, "feedback_template", None)
     if fb_template and variables:
-        fb_text = evaluate_feedback(fb_template, variables)
+        t_name = template_info.get("name") if hasattr(template_info, "get") else getattr(template_info, "name", None)
+        l_file = getattr(args, "log_file", None) if args else None
+        fb_text = evaluate_feedback(fb_template, variables, template_name=t_name, log_file=l_file)
     SubElement(SubElement(q_node, "generalfeedback", format="markdown"), "text").text = CDATA(fb_text)
 
     # Validar que no existan placeholders sin resolver (__var__) en enunciado, respuestas o feedback

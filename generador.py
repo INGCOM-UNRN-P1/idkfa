@@ -52,7 +52,8 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^[ \t]*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+    content = re.sub(r'[ \t]*//\s*#.*$', '', content, flags=re.MULTILINE)
     template_info = parse_c_template(content)
     
     log_file_path = args_dict.get("log_file") or f"{os.path.splitext(args_dict.get('output', 'cuestionario_moodle.xml'))[0]}.log"
@@ -72,7 +73,12 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
             "questions": []
         }
 
-    variants = generate_all_variants_deterministically(template_info['var_defs'], args_dict.get("num", 5))
+    variants = generate_all_variants_deterministically(
+        template_info['var_defs'], 
+        args_dict.get("num", 5),
+        template_name=filepath,
+        log_file=log_file_path
+    )
     generated_questions: List[Dict[str, Any]] = []
 
     base_flags: List[str] = [f.strip() for f in args_dict["cflags"].split()] if args_dict.get("cflags") else config_dict.get("compiler_flags", ["-Wall", "-Wextra"])
@@ -94,6 +100,18 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
                     expr = expr.replace(f"__{name}__", str(value))
                 correct_answer = str(eval(expr))
             except Exception as e:
+                if log_file_path:
+                    try:
+                        with open(log_file_path, "a", encoding="utf-8") as log:
+                            log.write(f"--- PYTHON EVAL ERROR [{datetime.datetime.now()}] ---\n")
+                            log.write(f"Template: {filepath}\n")
+                            log.write(f"Type: Correct Answer Expression\n")
+                            log.write(f"Expression: {template_info['correct_answer_expression']}\n")
+                            log.write(f"Evaluated Expression: {expr}\n")
+                            log.write(f"Error: {type(e).__name__}: {e}\n")
+                            log.write("-" * 40 + "\n\n")
+                    except Exception:
+                        pass
                 continue
         elif template_info.get("fixed_correct_answer"):
             correct_answer = template_info["fixed_correct_answer"]
@@ -120,7 +138,8 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
             dist_exprs,
             variables,
             count=min_distractors,
-            template_name=filepath
+            template_name=filepath,
+            log_file=log_file_path
         )
 
         display_code_instance = code_instance
@@ -217,7 +236,8 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        content = re.sub(r'^\s*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+        content = re.sub(r'^[ \t]*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+        content = re.sub(r'[ \t]*//\s*#.*$', '', content, flags=re.MULTILINE)
         
         template_info = parse_c_template(content)
         if template_info.get("status") == "error":
@@ -295,7 +315,10 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
 def main(args: list[str] | None = None) -> None:
     import typer
     from idkfa.cli import app
-    from typer._click.exceptions import Exit as ClickExit
+    try:
+        from click.exceptions import Exit as ClickExit
+    except ImportError:
+        ClickExit = typer.Exit
     try:
         app(args=args, standalone_mode=False)
     except (SystemExit, ClickExit, typer.Exit) as e:
