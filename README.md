@@ -149,6 +149,25 @@ make              # Compila todos los archivos
 make clean        # Elimina los ejecutables
 ```
 
+### 2.3. Síntesis procedural y exportación autónoma
+
+Además de las plantillas `.c`, `idkfa` trae generadores que compilan y ejecutan
+el código con GCC para fijar la salida correcta. Todos aceptan `--json`
+(`schema_version` `1.0.0`).
+
+| Comando | Qué genera | Opciones |
+| :--- | :--- | :--- |
+| `idkfa synth-bst` | Árbol binario de búsqueda con recorrido | `--recorrido/-r` (`inorden`, `preorden`, `postorden`), `--seed/-s` |
+| `idkfa synth-matrix` | Matriz 2D indexada con puntero plano | `--filas/-f`, `--cols/-c`, `--seed/-s` |
+| `idkfa synth-linked-list` | Operaciones sobre lista enlazada dinámica | `--seed/-s` |
+| `idkfa synth-tf` | Pregunta Verdadero/Falso con justificación | `--tema/-t` (`arrays_decay`, `sizeof_pointer`, `free_null`, `string_null_terminator`) |
+| `idkfa export-standalone ARCHIVO.c` | Snippet C ejecutable con `assert()` de autoevaluación | `--output/-o` (por defecto `standalone_autoeval.c`) |
+
+```bash
+idkfa synth-bst -r preorden --seed 7 --json
+idkfa export-standalone generated/punteros/basico/basico_v1.c -o autoeval.c
+```
+
 ## 3. Estructura de Directorios y Categorías
 
 El script utiliza la estructura de directorios dentro de la carpeta `source`
