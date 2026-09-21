@@ -171,3 +171,28 @@ int main(){ return 0; }
         res = parse_c_template(None)
         self.assertEqual(res["status"], "error")
         self.assertIsNotNone(res["reason"])
+
+    def test_parse_strips_inline_and_full_hash_comments(self):
+        content = """//# Encabezado de plantilla
+// Pregunta intro
+#include <stdio.h> //# include de entrada/salida
+
+int main() {
+    int x = 10; //# valor inicial
+    //# comentario de linea completa
+    printf("%d", x); // # imprimir valor
+    return 0;
+}
+// Pregunta cierre
+/*name Test Inline Comments*/
+"""
+        res = parse_c_template(content)
+        self.assertEqual(res["status"], "success")
+        code = res["code_template"]
+        self.assertNotIn("//#", code)
+        self.assertNotIn("// #", code)
+        self.assertNotIn("valor inicial", code)
+        self.assertNotIn("imprimir valor", code)
+        self.assertNotIn("Encabezado de plantilla", res["question_text_template"])
+        self.assertIn("int x = 10;", code)
+        self.assertIn('printf("%d", x);', code)

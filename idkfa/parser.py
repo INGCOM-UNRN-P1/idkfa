@@ -63,6 +63,11 @@ class TemplateInfo:
 def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
     """Analiza el contenido de un archivo .c, incluyendo metadatos y validaciones."""
     try:
+        # Los comentarios que comienzan con '//# ' o '//#' son documentación interna y no deben formar
+        # parte del enunciado ni del código de la pregunta en ningún bloque, ya sea línea completa o inline.
+        content = re.sub(r'^[ \t]*//\s*#.*$\n?', '', content, flags=re.MULTILINE)
+        content = re.sub(r'[ \t]*//\s*#.*$', '', content, flags=re.MULTILINE)
+
         lines = content.split('\n')
         
         intro_line_index = -1
@@ -87,6 +92,13 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
         outro_text = lines[outro_line_index].strip().lstrip('//').strip()
         code_block = '\n'.join(lines[intro_line_index+1:outro_line_index])
 
+        # Eliminar comentarios //# (líneas completas o inline) que hayan quedado en el bloque de código
+        code_lines = []
+        for l in code_block.split('\n'):
+            line_stripped = re.sub(r'[ \t]*//\s*#.*$', '', l)
+            if line_stripped.strip() or not l.strip().startswith('//'):
+                code_lines.append(line_stripped)
+        code_block = '\n'.join(code_lines)
         cleaned_code_block = re.sub(r'#define\s+__\w+__\s+.*\n?', '', code_block)
         
         # --- Lectura de variables ---
