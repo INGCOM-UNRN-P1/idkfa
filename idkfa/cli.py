@@ -29,6 +29,21 @@ app = typer.Typer(
 )
 
 
+def _version_instalada() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("idkfa")
+    except Exception:
+        return "desconocida"
+
+
+def _mostrar_version(value: bool) -> None:
+    if value:
+        console.print(f"idkfa {_version_instalada()}")
+        raise typer.Exit(code=0)
+
+
 class CliArgs:
     """Namespace compatible con la lógica interna de generación."""
     def __init__(self, **kwargs):
@@ -175,6 +190,14 @@ def main_cmd(
         False,
         "--json",
         help="Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr).",
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        is_eager=True,
+        callback=_mostrar_version,
+        help="Muestra la versión de idkfa y termina.",
     ),
 ) -> None:
     """Genera cuestionarios XML para Moodle a partir de plantillas C ejecutadas y verificadas."""

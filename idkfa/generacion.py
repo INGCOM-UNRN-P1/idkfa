@@ -315,12 +315,26 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
 def main(args: list[str] | None = None) -> None:
     import typer
     from idkfa.cli import app
+
+    # typer ≥ 0.2x trae click embebido (typer._click) y no exporta
+    # ClickException: se toma de la jerarquía pública de typer.BadParameter.
+    ClickException = next(c for c in typer.BadParameter.__mro__ if c.__name__ == "ClickException")
+    Abort = typer.Abort
     try:
         from click.exceptions import Exit as ClickExit
     except ImportError:
         ClickExit = typer.Exit
     try:
         app(args=args, standalone_mode=False)
+    except ClickException as e:
+        # standalone_mode=False deja pasar los errores de uso (opción
+        # inexistente, argumento sobrante, valor inválido): se muestran como
+        # lo haría Click, en lugar de un traceback (N-IDKFA-01).
+        e.show()
+        sys.exit(e.exit_code)
+    except Abort:
+        print("Operación cancelada.", file=sys.stderr)
+        sys.exit(1)
     except (SystemExit, ClickExit, typer.Exit) as e:
         code = getattr(e, "code", getattr(e, "exit_code", 0))
         if code != 0:
