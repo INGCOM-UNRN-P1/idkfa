@@ -38,14 +38,14 @@ Homepage = "https://github.com/INGCOM-UNRN-P1/idkfa"
 Repository = "https://github.com/INGCOM-UNRN-P1/idkfa.git"
 Issues = "https://github.com/INGCOM-UNRN-P1/idkfa/issues"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-]
-
 [project.scripts]
 idkfa = "idkfa.generacion:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["idkfa"]
 force-include = { "generador.py" = "generador.py" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
