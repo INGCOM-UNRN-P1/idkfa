@@ -6,6 +6,7 @@ import random
 import itertools
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional, Set, Union, Tuple
+from idkfa.evaluador import evaluar
 from idkfa.parser import DistractorDef
 
 class DistractorOption(str):
@@ -51,7 +52,7 @@ def generate_vars(
             for prev_name, prev_val in generated.items():
                 def_str = def_str.replace(f"__{prev_name}__", str(prev_val))
             
-            value_pool = eval(def_str, {"__builtins__": __builtins__}, generated)
+            value_pool = evaluar(def_str, generated)
             if hasattr(value_pool, '__iter__') and not isinstance(value_pool, (str, bytes)):
                 pool_list = list(value_pool)
                 generated[name] = random.choice(pool_list) if pool_list else ""
@@ -99,7 +100,7 @@ def generate_all_variants_deterministically(
             has_dynamic_deps = True
             break
         try:
-            val = eval(definition, {"__builtins__": __builtins__}, {})
+            val = evaluar(definition)
             if hasattr(val, '__iter__') and not isinstance(val, (str, bytes)):
                 val_list = list(val)
                 if len(val_list) > 1000:
@@ -247,8 +248,7 @@ def generate_incorrect_answers(
                 eval_context[f"__{var_name}__"] = var_value
             
             # Evaluar pasando variables y funciones auxiliares
-            eval_globals = {"__builtins__": __builtins__, "chr": chr, "ord": ord, "int": int, "float": float, "str": str, "bin": bin, "hex": hex}
-            calculated_value = eval(temp_expr, eval_globals, eval_context)
+            calculated_value = evaluar(temp_expr, eval_context)
             calc_str = str(calculated_value).strip()
             norm_calc = normalize_answer_repr(calc_str)
             
@@ -312,7 +312,7 @@ def generate_stdin(stdin_template: Optional[str], variables: Dict[str, Any]) -> 
         def replace_expr(match: re.Match) -> str:
             expr_str = match.group(1)
             try:
-                val = eval(expr_str, {"__builtins__": __builtins__}, variables)
+                val = evaluar(expr_str, variables)
                 return str(val)
             except Exception:
                 return match.group(0)

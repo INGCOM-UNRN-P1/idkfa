@@ -15,6 +15,7 @@ from typing import List, Tuple, Any, Dict, Optional
 from idkfa.config import CONFIG, AppConfig
 from idkfa.parser import parse_c_template, TemplateInfo
 from idkfa.compiler import compile_and_run_c
+from idkfa.evaluador import evaluar
 from idkfa.variables import (
     generate_vars,
     generate_all_variants_deterministically,
@@ -98,7 +99,7 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
                 expr = template_info["correct_answer_expression"]
                 for name, value in variables.items():
                     expr = expr.replace(f"__{name}__", str(value))
-                correct_answer = str(eval(expr))
+                correct_answer = str(evaluar(expr, variables))
             except Exception as e:
                 if log_file_path:
                     try:

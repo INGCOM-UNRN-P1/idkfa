@@ -5,6 +5,7 @@ import sys
 from xml.etree.ElementTree import SubElement, Element
 from typing import Dict, List, Optional, Any, Union
 from idkfa.config import CONFIG
+from idkfa.evaluador import evaluar
 from idkfa.variables import normalize_answer_repr, DistractorOption, adapt_grammar_and_pluralization, find_unresolved_placeholders
 
 def CDATA(text: Any) -> str:
@@ -30,7 +31,7 @@ def evaluate_feedback(
         def replace_expr(match: re.Match) -> str:
             expr_str = match.group(1)
             try:
-                val = eval(expr_str, {}, variables)
+                val = evaluar(expr_str, variables)
                 return str(val)
             except Exception as e:
                 if log_file:
