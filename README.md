@@ -1,5 +1,7 @@
 # `IDKFA`: Generador de Cuestionarios Moodle
 
+> 📖 **Manual de Usuario:** Para una guía exhaustiva de comandos, banderas, arquitectura y ejemplos, consultá el [Manual de Uso](MANUAL.md).
+
 ---
 
 ## 🎯 Alcance
