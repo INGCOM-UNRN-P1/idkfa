@@ -23,6 +23,7 @@ console = Console()
 err_console = Console(stderr=True)
 
 app = typer.Typer(
+    context_settings={"help_option_names": ["-h", "--help"]},
     name="idkfa",
     help="Generador de Cuestionarios Moodle XML desde plantillas C.",
     add_completion=True,
