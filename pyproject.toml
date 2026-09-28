@@ -33,6 +33,18 @@ dependencies = [
     "rich>=13.7.0",
 ]
 
+[project.optional-dependencies]
+# Herramientas del ecosistema que se usan como biblioteca (N-ECO-01). Referencias git fijadas
+# a commits publicados (nunca por nombre: esos nombres están tomados en PyPI por terceros).
+# Sin `ecosistema`, se compila con gcc directo; sin `languagetool`, spellcheck explica cómo
+# instalarlo.
+ecosistema = [
+    "daedalus @ git+https://github.com/INGCOM-UNRN-P1/daedalus@cd3eb998193cd5bd9ea881aa9a0e19f5fe6d9a86",
+]
+languagetool = [
+    "myst-tools @ git+https://github.com/martinvilu/mystmd-tools@a55f7db83b03aa1da9485b3cf70c49b71ece2664",
+]
+
 [project.urls]
 Homepage = "https://github.com/INGCOM-UNRN-P1/idkfa"
 Repository = "https://github.com/INGCOM-UNRN-P1/idkfa.git"
@@ -44,6 +56,10 @@ idkfa = "idkfa.generacion:main"
 [tool.hatch.build.targets.wheel]
 packages = ["idkfa"]
 force-include = { "generador.py" = "generador.py" }
+
+[tool.hatch.metadata]
+# Las dependencias del ecosistema son referencias directas a git (nunca por nombre en PyPI).
+allow-direct-references = true
 
 [dependency-groups]
 dev = [

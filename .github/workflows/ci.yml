@@ -24,9 +24,8 @@ jobs:
           enable-cache: true
 
       - name: Sincronizar dependencias
-        run: |
-          uv sync --all-extras
-          uv pip install "git+https://github.com/martinvilu/mystmd-tools.git"
+        # --all-extras trae daedalus y myst-tools fijados (extras ecosistema y languagetool).
+        run: uv sync --all-extras
 
       - name: Ejecutar suite de pruebas
         run: uv run pytest -q

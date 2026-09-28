@@ -13,6 +13,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from idkfa.config import CONFIG, AppConfig
 from idkfa.parser import parse_c_template
@@ -442,10 +443,15 @@ def cmd_spellcheck(
     import json
     from rich.table import Table
     from rich.panel import Panel
-    from idkfa.languagetool_checker import (
-        analizar_archivo_languagetool,
-        generar_reporte_markdown_languagetool,
-    )
+    try:
+        from idkfa.languagetool_checker import (
+            analizar_archivo_languagetool,
+            generar_reporte_markdown_languagetool,
+        )
+    except ModuleNotFoundError as error:  # sin el extra `languagetool` (N-ECO-01)
+        # escape: si no, Rich toma «[languagetool]» del comando de instalación como una etiqueta.
+        err_console.print(f"[bold red]Error:[/bold red] {escape(str(error))}", soft_wrap=True)
+        raise typer.Exit(code=1)
 
     archivos_a_revisar = []
     if paths:

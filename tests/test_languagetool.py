@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from idkfa.cli import app
-from idkfa.languagetool_checker import (
+# myst-tools llega con el extra `languagetool` (uv sync --extra languagetool).
+pytest.importorskip("myst_tools", reason="requiere el extra languagetool (myst-tools)")
+
+from idkfa.cli import app  # noqa: E402
+from idkfa.languagetool_checker import (  # noqa: E402
     enmascarar_plantilla,
     consultar_languagetool,
     analizar_archivo_languagetool,

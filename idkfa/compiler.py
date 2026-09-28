@@ -5,26 +5,17 @@ import subprocess
 import datetime
 import tempfile
 from pathlib import Path
-import sys
 from typing import Dict, List, Optional, Any
 from idkfa.config import CONFIG
 
 
 def _try_daedalus_compile(src_path: str, exe_path: str, flags: List[str], timeout: int):
-    """Intenta compilar usando el motor pedagógico unificado de DAEDALUS."""
+    """Intenta compilar con DAEDALUS (extra `ecosistema`); sin él devuelve None y se usa gcc directo."""
     try:
         from daedalus.core.compiler import compilar_archivos
-        return compilar_archivos([Path(src_path)], binario_salida=Path(exe_path), flags_adicionales=flags, timeout=timeout)
     except ImportError:
-        sibling = Path(__file__).resolve().parents[2] / "daedalus" / "src"
-        if sibling.is_dir() and str(sibling) not in sys.path:
-            sys.path.insert(0, str(sibling))
-            try:
-                from daedalus.core.compiler import compilar_archivos
-                return compilar_archivos([Path(src_path)], binario_salida=Path(exe_path), flags_adicionales=flags, timeout=timeout)
-            except ImportError:
-                return None
         return None
+    return compilar_archivos([Path(src_path)], binario_salida=Path(exe_path), flags_adicionales=flags, timeout=timeout)
 
 
 def compile_and_run_c(
