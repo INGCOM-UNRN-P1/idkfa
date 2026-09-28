@@ -236,7 +236,10 @@ class TestGeneradorUnit(unittest.TestCase):
                 "-n", "1"
             ]
             with patch("sys.argv", test_args_failed):
-                generador.main()
+                with self.assertRaises(SystemExit) as cm:
+                    generador.main()
+                # Una plantilla fallida termina con 1 (antes el código se perdía: N-IDKFA-03).
+                self.assertEqual(cm.exception.code, 1)
 
     def test_generador_run_as_main(self):
         # Execute generador.py as __main__ using runpy

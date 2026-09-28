@@ -326,7 +326,7 @@ def main(args: list[str] | None = None) -> None:
     except ImportError:
         ClickExit = typer.Exit
     try:
-        app(args=args, standalone_mode=False)
+        codigo = app(args=args, standalone_mode=False)
     except ClickException as e:
         # standalone_mode=False deja pasar los errores de uso (opción
         # inexistente, argumento sobrante, valor inválido): se muestran como
@@ -340,6 +340,12 @@ def main(args: list[str] | None = None) -> None:
         code = getattr(e, "code", getattr(e, "exit_code", 0))
         if code != 0:
             sys.exit(code)
+    else:
+        # Con standalone_mode=False, Click no lanza el typer.Exit de un comando: devuelve su código
+        # (ningún comando devuelve otro valor). Ignorarlo hacía salir con 0 aunque fallaran
+        # plantillas o spellcheck encontrara errores (N-IDKFA-03).
+        if isinstance(codigo, int) and codigo != 0:
+            sys.exit(codigo)
 
 
 
