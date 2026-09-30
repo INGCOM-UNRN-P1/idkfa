@@ -546,3 +546,56 @@ preview.html?mix=true&answers=true  # Ambas opciones combinadas
   respuestas incorrectas son plausibles y que la correcta es única.
 - **Prueba de variantes**: Revisar rápidamente múltiples variantes de las
   preguntas generadas.
+
+<!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
+
+## Referencia rápida
+
+### Requisitos
+
+- Python ≥ 3.11 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- Programas del sistema: `gcc`.
+
+| Sistema | `gcc` |
+|:--|:--|
+| Debian / Ubuntu | `sudo apt install gcc` |
+| Fedora | `sudo dnf install gcc` |
+| Windows | incluido en el entorno de la cátedra (MSYS2 UCRT64) |
+| macOS | `xcode-select --install` (clang como `gcc`) |
+
+### Opciones de `idkfa`
+
+| Opción | Descripción |
+|:--|:--|
+| `--source`, `-s` | Directorio con las plantillas .c o archivo .c individual. [default: templates] |
+| `--template`, `-t` | Procesar solo este archivo .c específico (ruta completa o relativa). |
+| `--output`, `-o` | Archivo XML de salida. [default: cuestionario_moodle.xml] |
+| `--num`, `--num-variants`, `-n` | Número de preguntas/variantes a generar por plantilla. [default: 5] |
+| `--category`, `-c` | Categoría base en Moodle. [default: Cuestionario C] |
+| `--generate-only`, `-g` | Solo generar código C en el directorio 'generated' sin crear XML. |
+| `--dry-run`, `--check`, `-d` | Modo validación rápida: verifica sintaxis y compilación sin generar XML. |
+| `--jobs`, `-j` | Número de procesos concurrentes para compilación y generación. [default: 1] |
+| `--penalty` | Penalización por defecto para respuestas incorrectas (ej: 0.25). |
+| `--defaultgrade` | Calificación por defecto de las preguntas (ej: 1.0). |
+| `--min-distractors` | Mínimo de distractores para preguntas de opción múltiple. [default: 3] |
+| `--compiler` | Compilador C a utilizar (por defecto: gcc). |
+| `--cflags` | Flags de compilación C adicionales o globales. |
+| `--config` | Ruta a archivo de configuración JSON personalizada. |
+| `--log-file` | Ruta al archivo de log. |
+| `--json` | Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr). |
+
+### Comandos
+
+| Comando | Descripción |
+|:--|:--|
+| `idkfa spellcheck` | Verifica ortografía y gramática en plantillas de C y cuestionarios generados usando LanguageTool. |
+| `idkfa synth-bst` | Sintetiza un árbol binario de búsqueda (BST) con recorrido C compilado y validado en GCC. |
+| `idkfa synth-matrix` | Sintetiza ejercicio de matrices bidimensionales y cálculo de índices con puntero plano. |
+| `idkfa synth-linked-list` | Sintetiza operaciones sobre listas enlazadas dinámicas en C validadas con GCC. |
+| `idkfa synth-tf` | Genera pregunta conceptual de Verdadero/Falso con justificación técnica. |
+| `idkfa export-standalone` | Exporta snippet a formato C ejecutable independiente con asserts de autoevaluación. |
+| `idkfa doctor` | Verifica el estado del entorno de IDKFA (Python, GCC, Valgrind). |
+
+Ayuda de cada comando: `idkfa <comando> -h`.
+
+<!-- p1:referencia:fin -->
