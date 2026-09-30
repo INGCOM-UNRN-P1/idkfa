@@ -14,6 +14,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import typer
 from rich.console import Console
 from rich.markup import escape
+from yutani.cli import CONTEXTO, TyperConErrores, opcion_version
+from yutani.textos import traducir
 
 from idkfa.config import CONFIG, AppConfig
 from idkfa.parser import parse_c_template
@@ -23,8 +25,12 @@ from idkfa.moodle_xml import create_moodle_question_xml, create_category_xml
 console = Console()
 err_console = Console(stderr=True)
 
-app = typer.Typer(
-    context_settings={"help_option_names": ["-h", "--help"]},
+# Contrato de línea de comandos del ecosistema (-h/--help, --version/-v, errores de datos como
+# mensajes) y ayuda de Typer/Click en español, desde yutani (N-ECO-14). No usa crear_app porque
+# el callback de la app raíz tiene las opciones de la generación.
+traducir()
+app = TyperConErrores(
+    context_settings=dict(CONTEXTO),
     name="idkfa",
     help="Generador de Cuestionarios Moodle XML desde plantillas C.",
     add_completion=True,
@@ -38,12 +44,6 @@ def _version_instalada() -> str:
         return version("idkfa")
     except Exception:
         return "desconocida"
-
-
-def _mostrar_version(value: bool) -> None:
-    if value:
-        console.print(f"idkfa {_version_instalada()}")
-        raise typer.Exit(code=0)
 
 
 class CliArgs:
@@ -193,14 +193,7 @@ def main_cmd(
         "--json",
         help="Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr).",
     ),
-    version: bool = typer.Option(
-        False,
-        "--version",
-        "-v",
-        is_eager=True,
-        callback=_mostrar_version,
-        help="Muestra la versión de idkfa y termina.",
-    ),
+    version: bool = opcion_version("idkfa", _version_instalada()),  # noqa: ARG001
 ) -> None:
     """Genera cuestionarios XML para Moodle a partir de plantillas C ejecutadas y verificadas."""
     if ctx.invoked_subcommand is not None:

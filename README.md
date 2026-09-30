@@ -567,17 +567,17 @@ preview.html?mix=true&answers=true  # Ambas opciones combinadas
 
 | Opción | Descripción |
 |:--|:--|
-| `--source`, `-s` | Directorio con las plantillas .c o archivo .c individual. [default: templates] |
+| `--source`, `-s` | Directorio con las plantillas .c o archivo .c individual. [por defecto: templates] |
 | `--template`, `-t` | Procesar solo este archivo .c específico (ruta completa o relativa). |
-| `--output`, `-o` | Archivo XML de salida. [default: cuestionario_moodle.xml] |
-| `--num`, `--num-variants`, `-n` | Número de preguntas/variantes a generar por plantilla. [default: 5] |
-| `--category`, `-c` | Categoría base en Moodle. [default: Cuestionario C] |
+| `--output`, `-o` | Archivo XML de salida. [por defecto: cuestionario_moodle.xml] |
+| `--num`, `--num-variants`, `-n` | Número de preguntas/variantes a generar por plantilla. [por defecto: 5] |
+| `--category`, `-c` | Categoría base en Moodle. [por defecto: Cuestionario C] |
 | `--generate-only`, `-g` | Solo generar código C en el directorio 'generated' sin crear XML. |
 | `--dry-run`, `--check`, `-d` | Modo validación rápida: verifica sintaxis y compilación sin generar XML. |
-| `--jobs`, `-j` | Número de procesos concurrentes para compilación y generación. [default: 1] |
+| `--jobs`, `-j` | Número de procesos concurrentes para compilación y generación. [por defecto: 1] |
 | `--penalty` | Penalización por defecto para respuestas incorrectas (ej: 0.25). |
 | `--defaultgrade` | Calificación por defecto de las preguntas (ej: 1.0). |
-| `--min-distractors` | Mínimo de distractores para preguntas de opción múltiple. [default: 3] |
+| `--min-distractors` | Mínimo de distractores para preguntas de opción múltiple. [por defecto: 3] |
 | `--compiler` | Compilador C a utilizar (por defecto: gcc). |
 | `--cflags` | Flags de compilación C adicionales o globales. |
 | `--config` | Ruta a archivo de configuración JSON personalizada. |
