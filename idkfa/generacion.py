@@ -125,8 +125,15 @@ def process_template_data(filepath: str, args_dict: Dict[str, Any], config_dict:
                 extra_flags=template_info.get("custom_flags"),
                 custom_compiler=custom_compiler,
                 base_flags=base_flags,
-                log_file=log_file_path
+                log_file=log_file_path,
+                validar_ub=config_dict.get("validar_ub", True),
             )
+            if result and result.get("status") == "undefined_behavior" and log_file_path:
+                with open(log_file_path, "a", encoding="utf-8") as log:
+                    log.write(f"--- UNDEFINED BEHAVIOR [{datetime.datetime.now()}] ---\n")
+                    log.write(f"Template: {filepath}\nVariante {idx + 1}: {variables}\n")
+                    log.write("La variante se descarta: con comportamiento indefinido tendría más de una respuesta.\n")
+                    log.write("-" * 40 + "\n\n")
             if not result or result.get("status") != "success":
                 continue
             correct_answer = result['output']

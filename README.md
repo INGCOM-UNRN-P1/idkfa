@@ -316,6 +316,19 @@ valor_2: range(300, 400)
 
 En este ejemplo, los distractores dependen del valor de `file_mode`, generando respuestas incorrectas contextuales según la variante.
 
+Si las opciones predefinidas y las expresiones no alcanzan `--min-distractors`, se completan con
+**confusiones frecuentes**, cada una con su retroalimentación: una vuelta de más o de menos en un
+lazo (`<` contra `<=`), la división entera que descarta decimales, el código ASCII en lugar del
+carácter (`%d` contra `%c`) y, para una secuencia, el recorrido al revés o una vuelta menos. Solo
+después se usan desplazamientos numéricos al azar.
+
+**Variantes con comportamiento indefinido.** Cada variante que se compila y ejecuta se verifica
+con UBSan en modo trampa (`-fsanitize=undefined -fsanitize-undefined-trap-on-error`, que no
+necesita libubsan): si tiene un desborde de enteros con signo, un índice fuera de rango u otro
+comportamiento indefinido, se descarta y queda registrada en el log, porque tendría más de una
+respuesta «correcta» según el compilador. `--sin-validar-ub` (o `"validar_ub": false` en la
+configuración JSON) lo desactiva.
+
 #### `/*correcta*/` (Opcional)
 
 Si este bloque está presente, su contenido se usará como la respuesta correcta
@@ -583,6 +596,7 @@ preview.html?mix=true&answers=true  # Ambas opciones combinadas
 | `--config` | Ruta a archivo de configuración JSON personalizada. |
 | `--log-file` | Ruta al archivo de log. |
 | `--json` | Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr). |
+| `--sin-validar-ub` | No descartar las variantes con comportamiento indefinido (por defecto se verifican con UBSan). |
 
 ### Comandos
 

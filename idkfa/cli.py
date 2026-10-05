@@ -193,6 +193,11 @@ def main_cmd(
         "--json",
         help="Emitir el resultado de la generación como JSON en stdout (el progreso y los avisos van a stderr).",
     ),
+    sin_validar_ub: bool = typer.Option(
+        False,
+        "--sin-validar-ub",
+        help="No descartar las variantes con comportamiento indefinido (por defecto se verifican con UBSan).",
+    ),
     version: bool = opcion_version("idkfa", _version_instalada()),  # noqa: ARG001
 ) -> None:
     """Genera cuestionarios XML para Moodle a partir de plantillas C ejecutadas y verificadas."""
@@ -216,6 +221,8 @@ def main_cmd(
     if config:
         cfg = AppConfig.load_from_file(str(config))
         CONFIG.update(cfg.to_dict())
+    if sin_validar_ub:
+        CONFIG["validar_ub"] = False
 
     args_obj = CliArgs(
         source=source_str,

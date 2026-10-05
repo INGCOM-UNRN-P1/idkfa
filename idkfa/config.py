@@ -35,6 +35,9 @@ class AppConfig:
     compilation_error_log: str = "compile_errors.log"
     parsing_error_log: str = "parsing_errors.log"
     substitutions: Dict[str, str] = field(default_factory=lambda: DEFAULT_SUBSTITUTIONS.copy())
+    # Descartar las variantes con comportamiento indefinido (QoL #546): tendrían más de una
+    # respuesta «correcta» según el compilador.
+    validar_ub: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +54,7 @@ class AppConfig:
             "compilation_error_log": self.compilation_error_log,
             "parsing_error_log": self.parsing_error_log,
             "substitutions": self.substitutions,
+            "validar_ub": self.validar_ub,
         }
 
     @classmethod

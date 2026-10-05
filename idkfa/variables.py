@@ -205,6 +205,43 @@ def is_mathematically_trivial(candidate_str: str, correct_answer: Any) -> bool:
         pass
     return False
 
+def confusiones_frecuentes(correct_answer: Any) -> List[Tuple[str, str]]:
+    """Respuestas que salen de errores típicos de P1 al seguir un programa, con su explicación.
+
+    - un entero: una vuelta de más o de menos (`<` contra `<=`, `i++` contra `++i`);
+    - un real: la división entera, que descarta los decimales;
+    - un carácter: su código ASCII (`%d` en lugar de `%c`), y un código imprimible: su carácter;
+    - una secuencia: el recorrido al revés y una vuelta menos.
+    """
+    texto = str(correct_answer).strip()
+    opciones: List[Tuple[str, str]] = []
+    partes = texto.split()
+    if len(partes) > 1:
+        opciones.append((" ".join(reversed(partes)), "El recorrido va en el otro sentido: revisá el índice inicial y la condición del lazo."))
+        opciones.append((" ".join(partes[:-1]), "El lazo termina una vuelta antes: revisá si la condición es `<` o `<=`."))
+        return opciones
+    try:
+        entero = int(texto)
+    except ValueError:
+        entero = None
+    if entero is not None:
+        opciones.append((str(entero + 1), "Una vuelta de más: revisá la condición del lazo (`<` contra `<=`) y si el incremento es antes o después de usar la variable."))
+        opciones.append((str(entero - 1), "Una vuelta de menos: revisá la condición del lazo y el valor inicial del contador."))
+        if 32 < entero < 127:
+            opciones.append((chr(entero), "Ese es el carácter cuyo código es ese número: con `%d` se imprime el código, con `%c` el carácter."))
+        return opciones
+    try:
+        real = float(texto)
+    except ValueError:
+        real = None
+    if real is not None and real != int(real):
+        opciones.append((str(int(real)), "Entre dos enteros, `/` hace división entera y descarta los decimales; acá alguno de los operandos es real."))
+        return opciones
+    if len(texto) == 1 and texto.isprintable():
+        opciones.append((str(ord(texto)), "Ese es el código ASCII del carácter: se vería con `%d`, pero acá se imprime con `%c`."))
+    return opciones
+
+
 def generate_incorrect_answers(
     correct_answer: Any, 
     predefined_options: List[str], 
@@ -280,7 +317,16 @@ def generate_incorrect_answers(
                 except Exception:
                     pass
 
-    # 3. Generación aleatoria de offsets numéricos no triviales
+    # 3. Confusiones frecuentes de los estudiantes, con su explicación (QoL #512)
+    for texto, feedback in confusiones_frecuentes(correct_answer):
+        if len(unique_incorrect) >= count:
+            break
+        norm = normalize_answer_repr(texto)
+        if norm and norm not in seen_normalized and not is_mathematically_trivial(texto, correct_answer):
+            seen_normalized.add(norm)
+            unique_incorrect.append(DistractorOption(text=texto, feedback=feedback))
+
+    # 4. Generación aleatoria de offsets numéricos no triviales
     try:
         num_correct = int(float(str(correct_answer).strip()))
         attempts = 0
