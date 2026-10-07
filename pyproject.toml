@@ -67,3 +67,9 @@ allow-direct-references = true
 dev = [
     "pytest>=8.0.0",
 ]
+
+[tool.mypy]
+# Tipos del paquete (N-ECO-08): `uv run --with mypy mypy`, igual que el CI.
+python_version = "3.11"
+files = ["idkfa"]
+ignore_missing_imports = true

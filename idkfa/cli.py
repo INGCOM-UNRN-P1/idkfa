@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import time
@@ -46,7 +47,7 @@ def _version_instalada() -> str:
         return "desconocida"
 
 
-class CliArgs:
+class CliArgs(argparse.Namespace):
     """Namespace compatible con la lógica interna de generación."""
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -521,7 +522,7 @@ def cmd_spellcheck(
     for iss in todos_los_issues:
         sug = ", ".join(iss.replacements[:2]) if iss.replacements else "[dim]—[/dim]"
         tabla.add_row(
-            iss.file_path.name,
+            iss.file_path.name if iss.file_path else "—",
             f"{iss.line}:{iss.column}",
             f"[red]{iss.original_word}[/red] ({iss.context})",
             sug,
@@ -669,7 +670,7 @@ def doctor_cmd(
     for c in diagnostico:
         color = "bold green" if c["estado"] == "OK" else ("bold yellow" if c["estado"] == "ADVERTENCIA" else "bold red")
         simbolo = "✓" if c["estado"] == "OK" else ("⚠️" if c["estado"] == "ADVERTENCIA" else "✗")
-        tabla.add_row(c["componente"], f"[{color}]{simbolo} {c['estado']}[/{color}]", c["detalle"])
+        tabla.add_row(str(c["componente"]), f"[{color}]{simbolo} {c['estado']}[/{color}]", str(c["detalle"]))
 
     console.print(tabla)
     if not todo_ok:

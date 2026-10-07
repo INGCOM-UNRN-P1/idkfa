@@ -326,7 +326,7 @@ def main(args: list[str] | None = None) -> None:
 
     # typer ≥ 0.2x trae click embebido (typer._click) y no exporta
     # ClickException: se toma de la jerarquía pública de typer.BadParameter.
-    ClickException = next(c for c in typer.BadParameter.__mro__ if c.__name__ == "ClickException")
+    ClickException: Any = next(c for c in typer.BadParameter.__mro__ if c.__name__ == "ClickException")
     Abort = typer.Abort
     try:
         from click.exceptions import Exit as ClickExit
