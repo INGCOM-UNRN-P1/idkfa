@@ -116,7 +116,7 @@ def generate_all_variants_deterministically(
     if not has_dynamic_deps and len(static_domains) == len(var_names):
         keys = list(static_domains.keys())
         all_combinations = list(itertools.product(*(static_domains[k] for k in keys)))
-        comb_dicts = [dict(zip(keys, prod)) for prod in all_combinations]
+        comb_dicts = [dict(zip(keys, prod, strict=False)) for prod in all_combinations]
         if len(comb_dicts) <= max_count:
             random.shuffle(comb_dicts)
             return comb_dicts

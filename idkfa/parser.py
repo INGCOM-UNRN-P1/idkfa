@@ -88,8 +88,8 @@ def parse_c_template(content: str) -> Union[TemplateInfo, Dict[str, Any]]:
         if outro_line_index <= intro_line_index:
             return TemplateInfo(status="error", reason="No se encontró el comentario de cierre (segunda línea que empieza con //).")
 
-        intro_text = lines[intro_line_index].strip().lstrip('//').strip()
-        outro_text = lines[outro_line_index].strip().lstrip('//').strip()
+        intro_text = lines[intro_line_index].strip().lstrip('/').strip()
+        outro_text = lines[outro_line_index].strip().lstrip('/').strip()
         code_block = '\n'.join(lines[intro_line_index+1:outro_line_index])
 
         # Eliminar comentarios //# (líneas completas o inline) que hayan quedado en el bloque de código

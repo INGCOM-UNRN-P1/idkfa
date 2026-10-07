@@ -231,7 +231,7 @@ def generate_c_code_only(args: argparse.Namespace) -> None:
         files_to_process = [(args.template, os.path.dirname(args.template) or ".")]
     else:
         files_to_process = []
-        for dirpath, dirnames, filenames in os.walk(args.source):
+        for dirpath, _dirnames, filenames in os.walk(args.source):
             for filename in filenames:
                 if filename.endswith(".c"):
                     filepath = os.path.join(dirpath, filename)

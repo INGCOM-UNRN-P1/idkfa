@@ -451,7 +451,7 @@ def cmd_spellcheck(
     except ModuleNotFoundError as error:  # sin el extra `languagetool` (N-ECO-01)
         # escape: si no, Rich toma «[languagetool]» del comando de instalación como una etiqueta.
         err_console.print(f"[bold red]Error:[/bold red] {escape(str(error))}", soft_wrap=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from error
 
     archivos_a_revisar = []
     if paths:
