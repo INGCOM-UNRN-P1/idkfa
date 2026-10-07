@@ -330,9 +330,9 @@ graph TD
 | Canal | Herramientas Conectadas | Tipo de Datos Transferidos |
 | :--- | :--- | :--- |
 | **Entradas (Inputs)** | - `Plantillas YAML con variables aleatorias y código C` | Código fuente, AST, binarios, testcases, contratos |
-| **Salidas (Outputs)** | - `moodle-toolbox (bancos XML)`
+| **Salidas (Outputs)** | - `voight (bancos XML)`
 - `alucarD (preguntas de parcial)` | Informes Markdown, diagnósticos Rich, JSON, actas |
-| **Sincronización** | `alucarD`, `moodle-toolbox`, `daedalus` | Validación cruzada, flags compartidos y autofix |
+| **Sincronización** | `alucarD`, `voight`, `daedalus` | Validación cruzada, flags compartidos y autofix |
 
 ### Pipeline de Integración Recomendado
 

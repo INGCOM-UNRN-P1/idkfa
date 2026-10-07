@@ -14,7 +14,7 @@
 
 ### Qué no cubre (Límites y Delegación)
 - Corrección de exámenes físicos impresos mediante OMR (delegado a `alucard`).
-- Mantenimiento y normalización de bancos de preguntas GIFT existentes (delegado a `moodle-toolbox`).
+- Mantenimiento y normalización de bancos de preguntas GIFT existentes (delegado a `voight`).
 - Empaquetado SCORM para campus virtual (delegado a `scorm-tools`).
 
 ---
