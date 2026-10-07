@@ -340,7 +340,7 @@ Podés encadenar `idkfa` con otras herramientas del ecosistema en una única lí
 
 ````{code-block} bash
 # Pipeline de integración típico
-idkfa generate templates/punteros.yaml -n 50 -o banco_ptr.xml && questions validate banco_ptr.xml
+idkfa generate templates/punteros.yaml -n 50 -o banco_ptr.xml && voight validate banco_ptr.xml
 ````
 
 ---
