@@ -53,7 +53,7 @@ Minimal Test Question
         
         # Run generator
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -95,7 +95,7 @@ val_b: range(1, 10)
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '3'
@@ -145,7 +145,7 @@ Nothing
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -188,7 +188,7 @@ __val__ * 3
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '2'
@@ -228,7 +228,7 @@ Crash
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -281,7 +281,7 @@ __num_b__
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '2'
@@ -493,7 +493,7 @@ Crash
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', str(num_variants)
@@ -535,7 +535,7 @@ CLI Test
         """Test -o/--output option."""
         custom_output = os.path.join(self.test_dir, 'custom.xml')
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', custom_output,
             '-n', '1'
@@ -570,7 +570,7 @@ x: range(1, 20)
         
         output = os.path.join(self.test_dir, 'output.xml')
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', output,
             '-n', '7'
@@ -586,7 +586,7 @@ x: range(1, 20)
         output = os.path.join(self.test_dir, 'output.xml')
         custom_category = 'test_category_name'
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', output,
             '-n', '1',
@@ -605,7 +605,7 @@ x: range(1, 20)
         template_file = os.path.join(self.templates_dir, 'test.c')
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-t', template_file,
             '-o', output,
             '-n', '2'
@@ -617,7 +617,7 @@ x: range(1, 20)
     def test_generate_only_mode(self):
         """Test -g/--generate-only option."""
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-n', '2',
             '-g'
@@ -669,7 +669,7 @@ Category Test
     def test_category_hierarchy(self):
         """Test that categories are created based on directory structure."""
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -713,7 +713,7 @@ No Intro Test
         
         # Should still run but skip this template
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -736,7 +736,7 @@ int main() {
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -763,7 +763,7 @@ Compilation Error Test
             f.write(template)
         
         result = subprocess.run([
-            'python3', 'generador.py',
+            sys.executable, 'generador.py',
             '-s', self.templates_dir,
             '-o', self.output_xml,
             '-n', '1'
@@ -1176,7 +1176,7 @@ Distractor Feedback Test
             expected_log = os.path.join(tmpdir, "mi_banco_preguntas.log")
 
             subprocess.run([
-                'python3', 'generador.py',
+                sys.executable, 'generador.py',
                 '-t', bad_template,
                 '-o', out_xml,
                 '-n', '1'
